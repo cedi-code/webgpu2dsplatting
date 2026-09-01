@@ -95,7 +95,6 @@ async function main() {
     vertexData.set([0.5, -0.5], currIndex + posOffset); // top center
     vertexData.set([0,0,1], currIndex + colorOffset); // blue
     
-    console.log(vertexData);
     // == seting up vertex data DONE ==
     
     ctx.device.queue.writeBuffer(vertexBuffer, 0, vertexData);

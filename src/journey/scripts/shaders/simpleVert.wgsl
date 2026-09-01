@@ -9,13 +9,9 @@ struct Vertex {
 }
 @vertex fn vs(
     vert: Vertex,
-    @builtin(instance_index) instanceIndex: u32,
 ) -> SimpleVertexShaderOutput {
-
-    var vsOut : SimpleVertexShaderOutput;
-
-    vsOut.position = vec4f(vert.position, 0.0, 1.0);
-    vsOut.color = vec4f(vert.color, 1.0);
-
-    return vsOut;
+    return SimpleVertexShaderOutput(
+        vec4f(vert.position, 0.0, 1.0),
+        vec4f(vert.color, 1.0)
+    );
 }
