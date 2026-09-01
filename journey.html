@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>webgpu-2dsplatting</title>
+    <title>webgpu-2dsplatting journey</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
     <style>
@@ -27,16 +27,30 @@
         overflow-y: hidden;
         padding: 8px 0;
       }
+      canvas {
+        display: block;
+        width: 400px;
+        height: 300px;
+        margin: 0 auto;
+        padding: 10px;
+      }
+      body {
+        background-color: rgb(190, 200, 255);
+        color: black;
+      }
     </style>
   </head>
   <body>
-    <h1>Hello</h1>
-    <div class="markdown-body markdown-dark" id="markdown-test"></div>
-    <h2>Hello 2</h2>
+    <h1>My little journey</h1>
+    <div class="markdown-body markdown-dark" id="markdown-intro"></div>
+    <h1>Render a 2d elipsoid</h1>
+    <div class="markdown-body markdown-dark" id="markdown-setup"></div>
+    <canvas id="setup"></canvas>
 
-    <div class="markdown-body markdown-dark" id="markdown-test2"></div>
 
 
     <script type="module" src="src/journey/mainJourney.ts"></script>
+    <script type="module" src="src/journey/scripts/main.ts"></script>
+    
   </body>
 </html>

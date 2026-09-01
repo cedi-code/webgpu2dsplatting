@@ -15,7 +15,7 @@ import {
 // Initialize Shiki
 const highlighter = await createHighlighter({
   themes: ['github-dark-dimmed'],
-  langs: ['typescript', 'javascript', 'html', 'css', 'glsl', 'wgsl'],
+  langs: ['typescript', 'javascript', 'html', 'css', 'glsl', 'wgsl', `markdown`]
 });
 
 // init marked (markdown parser, copied from docs: https://www.npmjs.com/package/marked-shiki)
@@ -61,17 +61,17 @@ async function loadMarkdown(url: string): Promise<string> {
     return response.text();
 }
 
-const filePath = 'src/journey/markdowns/test.md';
-const fileContent = await loadMarkdown(filePath);
-console.log(fileContent);
+const introPath = 'src/journey/markdowns/intro.md';
+const setupPath = 'src/journey/markdowns/setup.md';
 
-const hello : String = "Hello";
-
-const testi : string = await marked.parse(fileContent);
-
-document.getElementById('markdown-test')!.innerHTML = testi;
-
-document.getElementById('markdown-test2')!.innerHTML = testi;
+const introContent = await loadMarkdown(introPath);
+const setupContent = await loadMarkdown(setupPath);
 
 
-console.log(hello);
+const introMD : string = await marked.parse(introContent);
+const setupMD : string = await marked.parse(setupContent);
+
+
+document.getElementById('markdown-intro')!.innerHTML = introMD;
+
+document.getElementById('markdown-setup')!.innerHTML = setupMD;
