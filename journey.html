@@ -43,14 +43,18 @@
   <body>
     <h1>My little journey</h1>
     <div class="markdown-body markdown-dark" id="markdown-intro"></div>
-    <h1>Render a 2d elipsoid</h1>
+    <h1>Render a 2d gaussian</h1>
     <div class="markdown-body markdown-dark" id="markdown-setup"></div>
     <canvas id="setup"></canvas>
 
+    <div class="markdown-body markdown-dark" id="markdown-drawelipse"></div>
+    <canvas id="draw-elipse"></canvas>
 
 
     <script type="module" src="src/journey/mainJourney.ts"></script>
-    <script type="module" src="src/journey/scripts/main.ts"></script>
+    <script type="module" src="src/journey/scripts/setup/mainSetup.ts"></script>
+    <script type="module" src="src/journey/scripts/draw/mainElipse.ts"></script>
+
     
   </body>
 </html>

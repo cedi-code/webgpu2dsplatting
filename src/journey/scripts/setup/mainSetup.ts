@@ -1,6 +1,6 @@
-import { bufferManager, VertexBufferDescriptorBuilder } from '../../myutils/BufferHelper';
+import { bufferManager, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
-import { getWebGPUctx, render } from '../../myutils/ContextHelpers';
+import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 async function main() {
 

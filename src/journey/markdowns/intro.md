@@ -6,7 +6,7 @@ as of writing this intro page my plan for making this project looks as follows:
 
 ### Rough Plan for making 2dgs in webgpu
 
-* [ ] Render a 2d elipsoid (gaussian) — *chapter 4*
+* [ ] Render a 2d gaussian — *chapter 4*
 * [ ] Optimization Step — *chapter 5.1*
 * [ ] The densification and refinment step — *chapter 5.2*
 

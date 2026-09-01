@@ -1,12 +1,12 @@
-## Render a 2d elipsoid
+## Render a 2d gaussian
 Lets start at the first step, just rendering a elipsoid
 
 II will break down this step in the following substeps:
 
-### Render a 2d elipsoid
+### Render a 2d gaussian
 * [ ] WebGPU setup (rendering simple trinalge)
-* [ ] Drawing Elipsoid
-* [ ] Transform Elipsoid
+* [ ] Drawing a Gaussian
+* [ ] Transforming Gaussians
 * [ ] spherical harmonics??
 
 Cool. Lets start coding.
