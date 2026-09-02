@@ -16,4 +16,4 @@ as of writing this intro page my plan for making this project looks as follows:
 
 **finish up**
 
-###### *For documenting my journey I'm using marked, shiki and Katex to display my markdown text, I will also render out the current process in a canvas after each chapter.*
+###### *markdown rendering is powerd by [marked](https://www.npmjs.com/package/marked), [shiki](https://www.npmjs.com/package/shiki) and [Katex](https://www.npmjs.com/package/katex)*

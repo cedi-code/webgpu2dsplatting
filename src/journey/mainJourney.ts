@@ -23,6 +23,7 @@ marked
 .use(
     markedKatex({
       throwOnError: false,
+      nonStandard: true,
     })
   )
 .use(markedShiki({
@@ -61,17 +62,38 @@ async function loadMarkdown(url: string): Promise<string> {
     return response.text();
 }
 
-const introPath = 'src/journey/markdowns/intro.md';
-const setupPath = 'src/journey/markdowns/setup.md';
+interface MarkdownSection {
+  id: string;
+  md: string;
+}
 
-const introContent = await loadMarkdown(introPath);
-const setupContent = await loadMarkdown(setupPath);
+const mdPath: string = "src/journey/markdowns/"
 
+const markdownSections: MarkdownSection[] = [
+  { 
+    id: 'markdown-intro', 
+    md: 'intro.md' 
+},
+  { 
+    id: 'markdown-setup', 
+    md: 'setup.md' 
+},
+  { 
+    id: 'markdown-drawgauss',
+    md: 'splat.md' 
+}, 
+  {
+    id: 'markdown-elipsoid',
+    md: 'splatEdit.md'
+}
+];
 
-const introMD : string = await marked.parse(introContent);
-const setupMD : string = await marked.parse(setupContent);
+// Sequential Load & Render
+for (const { id, md } of markdownSections) {
+  const el = document.getElementById(id);
+  if (!el) continue;
 
-
-document.getElementById('markdown-intro')!.innerHTML = introMD;
-
-document.getElementById('markdown-setup')!.innerHTML = setupMD;
+  const response = await fetch(mdPath + md);
+  const rawText = await response.text();
+  el.innerHTML = await marked.parse(rawText);
+}
