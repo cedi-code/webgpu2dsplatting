@@ -38,21 +38,24 @@ We have to sample $G(x)$ for the whole screen and therefore we do the following 
 ### Shaders
 Ok, lets implement! Our vertex shader is now very simple and just renders a single static tile (`staticTileVert.wgsl`):
 ```wgsl
-@vertex fn vs(
-@builtin(vertex_index) vi : u32
-    ) -> @builtin(position) vec4f {
-    let pos = array(
-        // triangle 1
-        vec2f( -1.0,  1.0),  // left top
-        vec2f( -1.0,  -1.0), // left bottom
-        vec2f( 1.0,  -1.0),  // right bottom
+const tile = array(
+    // triangle 1
+    vec2f( -1.0,  1.0),  // left top
+    vec2f( -1.0,  -1.0), // left bottom
+    vec2f( 1.0,  -1.0),  // right bottom
 
-        // triangle 2
-        vec2f( -1.0,  1.0), // left top
-        vec2f( 1.0,  -1.0), // right bottom
-        vec2f( 1.0,  1.0),  // right top
-    );
-    return vec4f(pos[vi], 0.0, 1.0);
+    // triangle 2
+    vec2f( -1.0,  1.0), // left top
+    vec2f( 1.0,  -1.0), // right bottom
+    vec2f( 1.0,  1.0),  // right top
+
+);
+
+@vertex fn vs(
+    @builtin(vertex_index) i : u32
+) -> @builtin(position) vec4f {
+
+    return vec4f(tile[i], 0.0, 1.0);
 }
 ```
 

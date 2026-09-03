@@ -1,5 +1,5 @@
 import { Pane } from 'tweakpane';
-import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
+import { bufferManager, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
@@ -139,7 +139,6 @@ async function main() {
     // == inputs == 
     let updateInstance = (index : number, value : ArrayLike<number>) => {
         instanceValues.set(value, (numInstances-1)*vDesc.unitSize + vDesc.attributes[index].offset);
-        
         ctx.device.queue.writeBuffer(instanceBuff, 0, instanceValues);
     }
 
@@ -158,11 +157,11 @@ async function main() {
         picker: 'inline',
         expanded: true,
         
-        x: { min: 0, max: 4.0, step: 0.01 },
-        y: { min: 0, max: 4.0, step: 0.01, inverted: true },
+        x: { min: 0, max: 1.0, step: 0.01 },
+        y: { min: 0, max: 1.0, step: 0.01, inverted: true },
     })
     .on('change', (ev) => {
-        updateInstance(1, [1.0/ev.value.x, 1.0/ev.value.y]);
+        updateInstance(1, [ev.value.x, ev.value.y]);
         render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
     });
 
@@ -179,8 +178,8 @@ async function main() {
         picker: 'inline',
         expanded: true,
         
-        x: { min: -1.0, max: 1.0, step: 0.01 },
-        y: { min: -1.0, max: 1.0, step: 0.01, inverted: true },
+        x: { min: -1.0, max: 2.0, step: 0.01 },
+        y: { min: -1.0, max: 2.0, step: 0.01, inverted: true },
     })
     .on('change', (ev) => {
         updateInstance(0, [ev.value.x, ev.value.y]);
@@ -190,8 +189,7 @@ async function main() {
     pane.addBinding(PARAMS, 'opaque')
     .on('change', (ev) => {
         pipeline = ev.value ? pipelineB : pipelineA;
-        render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
-        
+        render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);        
     })
 }
 

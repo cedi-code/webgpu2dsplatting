@@ -43,7 +43,7 @@ fn rotMat(r: f32) -> mat2x2f {
     let posGauss : vec2f = R * (s * tile[i]) + t;
 
     return SimpleVertexShaderOutput(
-        vec4f(posGauss, 1.0 - f32(j+1) / 100.0, 1.0),
+        vec4f(posGauss, 1.0 - f32(j+1) / 1000.0, 1.0),
         vec2f(tile[i]),
         splat.color,
     );
