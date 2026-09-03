@@ -10,6 +10,7 @@ function render(
     bindGroup?: GPUBindGroup, 
     vertexBuffer?: GPUBuffer,
     numVert? : number,
+    numInstances? : number,
     ) {
 
     // get current textrure from canvas
@@ -28,9 +29,9 @@ function render(
     // make a render pass
     const pass = encoder.beginRenderPass(ctx.renderPassDescriptor);
     pass.setPipeline(pipeline);
-    if(vertexBuffer) pass.setVertexBuffer(0, vertexBuffer);
-    if(bindGroup) pass.setBindGroup(0, bindGroup);
-    pass.draw(numVert || 0, 1);
+    if(vertexBuffer) pass.setVertexBuffer(0, vertexBuffer); // we might have multiple vertex buffers!
+    if(bindGroup) pass.setBindGroup(0, bindGroup); // we might have multiple bind groups!
+    pass.draw(numVert || 0, numInstances || 1);
     pass.end();
 
     const commandBuffer = encoder.finish();

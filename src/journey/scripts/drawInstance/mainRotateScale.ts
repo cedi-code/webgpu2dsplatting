@@ -1,7 +1,11 @@
 import { Pane } from 'tweakpane';
-import { bufferManager, UniformBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
+import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
+
+const rnd = (min : number, max : number) : number => {
+        return Math.random() * (max - min) + min;
+}
 
 async function main() {
 
@@ -26,13 +30,26 @@ async function main() {
     });
 
     const numVerticies : number = 6; // hardcoded in the shader, ugly but short
-    const pipeline = ctx.device.createRenderPipeline({
+    const numInstances = 4;    
+
+    bufferManager.init(ctx.device);
+
+    const vBuilder = new VertexBufferDescriptorBuilder("Splat Instances", numInstances, "instance");
+
+    vBuilder.add(0, "position", "float32x2")
+            .add(1, "scale", "float32x2")
+            .add(2, "color", "float32x3")
+            .add(3, "rotation", "float32");
+    
+    const pipeLineDesc :  GPURenderPipelineDescriptor = {
         label: 'hardcoded checkerboard triangle',
         layout: 'auto',
         vertex: {
             entryPoint: 'vs',
             module: vsModule,
-            buffers: [],
+            buffers: [
+                vBuilder.buildLayout(),
+            ],
         },
         fragment: {
             entryPoint: 'fs',
@@ -41,9 +58,13 @@ async function main() {
                 format: ctx.presentationFormat ,
                 blend: {
                     color: {
+                        operation: 'add',
+                        srcFactor: 'one',
                         dstFactor: 'one-minus-src-alpha',
                     },
                     alpha: {
+                        operation: 'add',
+                        srcFactor: 'one',
                         dstFactor: 'one-minus-src-alpha',
                     },
                 }
@@ -55,7 +76,15 @@ async function main() {
             depthCompare: 'less',
             format: 'depth24plus',
         }
-    });
+    };
+    const pipelineA = ctx.device.createRenderPipeline(pipeLineDesc);
+
+    pipeLineDesc.fragment!.targets.at(0)!.blend!.color.dstFactor = 'zero';
+    pipeLineDesc.fragment!.targets.at(0)!.blend!.alpha.dstFactor = 'zero';
+
+    const pipelineB = ctx.device.createRenderPipeline(pipeLineDesc);
+
+    let pipeline = pipelineA;
 
     const renderPassDescriptor : GPURenderPassDescriptor= {
         label: 'basic renderpass',
@@ -76,55 +105,49 @@ async function main() {
     };
     ctx.renderPassDescriptor = renderPassDescriptor;
 
-    // == uniform buffer setup ==
-    bufferManager.init(ctx.device);
+    // == buffer data setup ==
+    const vDesc = vBuilder.build();
 
-    const uBuilder = new UniformBufferDescriptorBuilder("My Uniform Buffer", "uniform");
-    uBuilder.add("scale", "vec2f")
-            .add("rotation", "f32")
-            .add("mean", "vec2f");
-    const uDesc = uBuilder.build();
+    const instanceBuff = bufferManager.createBuffer(vDesc);
+    const instanceValues = new Float32Array(vDesc.unitSize * numInstances);
+    /*
+    struct Splat {
+        @location(0) position: vec2f,
+        @location(1) scale: vec2f,
+        @location(2) color: vec3f,
+        @location(3) rotation: f32, 
+    };
+    */
+    for(let i = 0; i < numInstances; i++) {
+        const att = vDesc.attributes;
+        const off = vDesc.unitSize * i;
 
-    const uBuffer = bufferManager.createBuffer(uDesc);
+        instanceValues.set([rnd(-1,1), rnd(-1,1)],      off + att[0].offset);
+        instanceValues.set([rnd(0,1),  rnd(0,1) ],      off + att[1].offset);
+        instanceValues.set(
+            [Math.round(rnd(0,1)), Math.round(rnd(0,1)), Math.round(rnd(0,1))],
+                                                        off + att[2].offset);
+        instanceValues.set([rnd(0,2*Math.PI)],         off + att[3].offset);
+    }
 
-    const uValues = new Float32Array(uDesc.size);
-    const att = uDesc.attributes;
+    ctx.device.queue.writeBuffer(instanceBuff, 0, instanceValues);
 
-    uValues.set(
-        [2.0, 2.0]
-    , att[0].offset); // scale Mat
+    // == buffer done ==
 
-    uValues.set([0]
-    , att[1].offset); // rotation
-
-    uValues.set(
-        [0,0]
-    , att[2].offset); // mean vec
-
-    ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
-
-    const bindGroup = ctx.device.createBindGroup({
-        label: 'my bind group',
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: { buffer: uBuffer }},
-        ]
-    });
-
-    // == uniform buffer done ==
-
-    render(ctx, pipeline, bindGroup, undefined, numVerticies);
+    render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
 
     // == inputs == 
-    let updateUniform = (index : number, value : ArrayLike<number>) => {
-        uValues.set(value, uDesc.attributes[index].offset);
-        ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
+    let updateInstance = (index : number, value : ArrayLike<number>) => {
+        instanceValues.set(value, (numInstances-1)*vDesc.unitSize + vDesc.attributes[index].offset);
+        
+        ctx.device.queue.writeBuffer(instanceBuff, 0, instanceValues);
     }
 
     const PARAMS = {
         scale: { x: 0.5, y: 0.5 },
         rotation: 0.0,
-        position: { x: 0, y : 0}
+        position: { x: 0, y : 0},
+        opaque: false,
     };
 
     const pane = new Pane({
@@ -135,12 +158,12 @@ async function main() {
         picker: 'inline',
         expanded: true,
         
-        x: { min: 0, max: 2.0, step: 0.01 },
-        y: { min: 0, max: 2.0, step: 0.01, inverted: true },
+        x: { min: 0, max: 4.0, step: 0.01 },
+        y: { min: 0, max: 4.0, step: 0.01, inverted: true },
     })
     .on('change', (ev) => {
-        updateUniform(0, [1.0/ev.value.x, 1.0/ev.value.y]);
-        render(ctx, pipeline, bindGroup, undefined, numVerticies);
+        updateInstance(1, [1.0/ev.value.x, 1.0/ev.value.y]);
+        render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
     });
 
     pane.addBinding(PARAMS, 'rotation', {
@@ -148,8 +171,8 @@ async function main() {
         max: 2* Math.PI,
     })
     .on('change', (ev) => {
-        updateUniform(1, [ev.value]);
-        render(ctx, pipeline, bindGroup, undefined, numVerticies);
+        updateInstance(3, [ev.value]);
+        render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
     });
 
     pane.addBinding(PARAMS, 'position', {
@@ -160,10 +183,16 @@ async function main() {
         y: { min: -1.0, max: 1.0, step: 0.01, inverted: true },
     })
     .on('change', (ev) => {
-        updateUniform(2, [ev.value.x, ev.value.y]);
-        render(ctx, pipeline, bindGroup, undefined, numVerticies);
+        updateInstance(0, [ev.value.x, ev.value.y]);
+        render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
     });
 
+    pane.addBinding(PARAMS, 'opaque')
+    .on('change', (ev) => {
+        pipeline = ev.value ? pipelineB : pipelineA;
+        render(ctx, pipeline, undefined, instanceBuff, numVerticies, numInstances);
+        
+    })
 }
 
 main();

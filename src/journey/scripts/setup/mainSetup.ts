@@ -82,9 +82,10 @@ async function main() {
     const posOffset = attrib[0].offset;
     const colorOffset = attrib[1].offset;
 
+    
 
     let currIndex = 0;
-    vertexData.set([ 0.0, 0.5], currIndex + posOffset); // left bottom
+    vertexData.set([0.0, 0.5], currIndex + posOffset); // left bottom
     vertexData.set([1.0,0.0,0.0], currIndex + colorOffset); // red
 
     currIndex += triangleVBDesc.unitSize;
