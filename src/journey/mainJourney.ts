@@ -56,12 +56,6 @@ marked
 }
 )); 
 
-
-async function loadMarkdown(url: string): Promise<string> {
-    const response = await fetch(url);
-    return response.text();
-}
-
 interface MarkdownSection {
   id: string;
   md: string;

@@ -23,8 +23,6 @@ function render(
         ctx.renderPassDescriptor.depthStencilAttachment.view = ctx.depthTexture.createView();
     }
 
-    console.log(vertexBuffer);
-
     const encoder = ctx.device.createCommandEncoder({ label: 'my first encoder'});
 
     // make a render pass
@@ -78,6 +76,7 @@ async function getWebGPUctx(options? : ctxOptions) : Promise< ctxFull| null> {
     context.configure({
         device,
         format: presentationFormat,
+        alphaMode: "premultiplied",
     });
 
     const depthTexture = device.createTexture({

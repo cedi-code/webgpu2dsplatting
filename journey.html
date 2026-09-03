@@ -70,7 +70,6 @@
         width: 400px;
         height: 300px;
         margin: 0 auto;
-        padding: 10px;
       }
       body {
         background-color: rgb(190, 200, 255);
@@ -98,8 +97,20 @@
       </div>
     </div>
 
+    
     <div class="markdown-body markdown-dark" id="markdown-elipsoid"></div>
-    <canvas class="markdown-body" id="rotate-scale-elipse"></canvas>
+    <div class="markdown-body">
+      <div class="sliders-row">
+        <div>
+          <div class="slider" id="scale-sliders"></div>
+          <div class="slider" id="rotation-sliders"></div>
+          <div class="slider" id="pos-slider"></div>
+          Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
+        </div>
+        <canvas id="rotate-scale-elipse"></canvas>
+      </div>
+    </div>
+
 
 
 
@@ -107,6 +118,7 @@
     <script type="module" src="src/journey/mainJourney.ts"></script>
     <script type="module" src="src/journey/scripts/setup/mainSetup.ts"></script>
     <script type="module" src="src/journey/scripts/draw/mainElipse.ts"></script>
+    <script type="module" src="src/journey/scripts/drawInstance/mainRotateScale.ts"></script>
 
     
   </body>

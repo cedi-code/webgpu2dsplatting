@@ -76,8 +76,7 @@ So here is a implementation of $G'(x)$ in `simpleGaussFrag.wgsl`:
 @fragment fn fs(
     @builtin(position) p : vec4f
     ) -> @location(0) vec4f {
-    
-    const PI = 355.0/113.0;
+        
     const mean : vec2f = canvas.xy * 0.5; // center of screen
     const sigmaInv : mat2x2f = [20.0, 0.0, 0.0, 20.0]; // diagonal matrix
 
@@ -88,12 +87,7 @@ So here is a implementation of $G'(x)$ in `simpleGaussFrag.wgsl`:
     return vec4f(gauss, gauss, gauss, 1.0);
 }
 ```
-#### Normalization
-if you want to have $\mu$ in range [0,1] we have to normalize `@builtin(position) p`, since its given  **Framebuffer coordinates**, which go from: [0, pixelsOnCanvas].
-```wgsl
--   let d = p.xy - mean; // [!code --]   
-+   let d = (p.xy / canvas.xy) - mean; // [!code ++]  
-```
+
 
 For the script bellow I also added a uniform buffer to make it interactable, but now we can render a GS primitive! :)
 
