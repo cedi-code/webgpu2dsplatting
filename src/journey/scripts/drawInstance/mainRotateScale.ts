@@ -3,6 +3,10 @@ import { bufferManager, VertexBufferDescriptorBuilder } from '../../../myutils/B
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
+// shaders
+import shaderCodeVert from '../shaders/gaussTileVert.wgsl?raw'
+import shaderCodeFrag from '../shaders/gaussFrag.wgsl?raw'
+
 const rnd = (min : number, max : number) : number => {
         return Math.random() * (max - min) + min;
 }
@@ -14,11 +18,6 @@ async function main() {
         return;
     }
     
-    const responseVert = await fetch('src/journey/scripts/shaders/gaussTileVert.wgsl');
-    const shaderCodeVert = await responseVert.text();
-    const responseFrag = await fetch('src/journey/scripts/shaders/gaussFrag.wgsl');
-    const shaderCodeFrag = await responseFrag.text();
-
     const vsModule = ctx.device.createShaderModule({
         label: ' simple vertex shader',
         code:  shaderCodeVert,

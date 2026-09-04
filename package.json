@@ -11,6 +11,7 @@
   "devDependencies": {
     "@tweakpane/core": "^2.0.5",
     "@types/katex": "^0.16.8",
+    "@types/node": "^26.4.1",
     "@webgpu/types": "^0.1.72",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"

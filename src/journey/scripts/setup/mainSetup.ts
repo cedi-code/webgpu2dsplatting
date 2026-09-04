@@ -2,6 +2,10 @@ import { bufferManager, VertexBufferDescriptorBuilder } from '../../../myutils/B
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
+import shaderCodeVert from '../shaders/simpleVert.wgsl?raw'
+import shaderCodeFrag from '../shaders/simpleFrag.wgsl?raw'
+
+
 async function main() {
 
     const ctx = await getWebGPUctx({ canvasId: "setup"});
@@ -9,11 +13,6 @@ async function main() {
         return;
     }
     
-    const responseVert = await fetch('src/journey/scripts/shaders/simpleVert.wgsl');
-    const shaderCodeVert = await responseVert.text();
-    const responseFrag = await fetch('src/journey/scripts/shaders/simpleFrag.wgsl');
-    const shaderCodeFrag = await responseFrag.text();
-
     const vsModule = ctx.device.createShaderModule({
         label: ' simple vertex shader',
         code:  shaderCodeVert,

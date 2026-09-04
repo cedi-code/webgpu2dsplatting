@@ -56,38 +56,26 @@ marked
 }
 )); 
 
+import introRaw from './markdowns/intro.md?raw';
+import setupRaw from './markdowns/setup.md?raw';
+import splatRaw from './markdowns/splat.md?raw';
+import splatEditRaw from './markdowns/splatEdit.md?raw';
+
 interface MarkdownSection {
   id: string;
-  md: string;
+  rawText: string;
 }
-
-const mdPath: string = "src/journey/markdowns/"
 
 const markdownSections: MarkdownSection[] = [
-  { 
-    id: 'markdown-intro', 
-    md: 'intro.md' 
-},
-  { 
-    id: 'markdown-setup', 
-    md: 'setup.md' 
-},
-  { 
-    id: 'markdown-drawgauss',
-    md: 'splat.md' 
-}, 
-  {
-    id: 'markdown-elipsoid',
-    md: 'splatEdit.md'
-}
+  { id: 'markdown-intro', rawText: introRaw },
+  { id: 'markdown-setup', rawText: setupRaw },
+  { id: 'markdown-drawgauss', rawText: splatRaw },
+  { id: 'markdown-elipsoid', rawText: splatEditRaw },
 ];
 
-// Sequential Load & Render
-for (const { id, md } of markdownSections) {
+for (const { id, rawText } of markdownSections) {
   const el = document.getElementById(id);
-  if (!el) continue;
-
-  const response = await fetch(mdPath + md);
-  const rawText = await response.text();
-  el.innerHTML = await marked.parse(rawText);
+  if (el) {
+    el.innerHTML = await marked.parse(rawText);
+  }
 }

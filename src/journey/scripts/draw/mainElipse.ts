@@ -3,6 +3,11 @@ import { bufferManager, UniformBufferDescriptorBuilder } from '../../../myutils/
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
+// shaders
+import shaderCodeVert from '../shaders/staticTileVert.wgsl?raw'
+import shaderCodeFrag from '../shaders/simpleGaussFrag.wgsl?raw'
+
+
 async function main() {
 
     const ctx = await getWebGPUctx({ canvasId: "draw-elipse"});
@@ -10,11 +15,6 @@ async function main() {
         return;
     }
     
-    const responseVert = await fetch('src/journey/scripts/shaders/staticTileVert.wgsl');
-    const shaderCodeVert = await responseVert.text();
-    const responseFrag = await fetch('src/journey/scripts/shaders/simpleGaussFrag.wgsl');
-    const shaderCodeFrag = await responseFrag.text();
-
     const vsModule = ctx.device.createShaderModule({
         label: ' simple vertex shader',
         code:  shaderCodeVert,
