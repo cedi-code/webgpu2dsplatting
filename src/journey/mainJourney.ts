@@ -56,29 +56,15 @@ marked
 }
 )); 
 
-import introRaw from './markdowns/intro.md?raw';
-import setupRaw from './markdowns/setup.md?raw';
-import splatRaw from './markdowns/splat.md?raw';
-import splatEditRaw from './markdowns/splatEdit.md?raw';
-import harmonicsRaw from './markdowns/sphericalHarmonics.md?raw';
+const modules = import.meta.glob('./markdowns/*.md', { query: '?raw', import: 'default' });
 
+for (const [path, loader] of Object.entries(modules)) {
+  // e.g. "./markdowns/intro.md" -> "intro"
+  const name = path.split('/').pop()?.replace('.md', '');
+  const el = document.getElementById(`markdown-${name}`);
 
-interface MarkdownSection {
-  id: string;
-  rawText: string;
-}
-
-const markdownSections: MarkdownSection[] = [
-  { id: 'markdown-intro', rawText: introRaw },
-  { id: 'markdown-setup', rawText: setupRaw },
-  { id: 'markdown-drawgauss', rawText: splatRaw },
-  { id: 'markdown-elipsoid', rawText: splatEditRaw },
-  { id: 'markdown-harmonics', rawText: harmonicsRaw },
-];
-
-for (const { id, rawText } of markdownSections) {
-  const el = document.getElementById(id);
   if (el) {
+    const rawText = (await loader()) as string;
     el.innerHTML = await marked.parse(rawText);
   }
 }

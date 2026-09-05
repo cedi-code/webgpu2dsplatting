@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>webgpu-2dsplatting journey</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
+    <link rel="stylesheet" href="mystle.css">
+  </head>
+  <body>
+    <h1>Render a 2d gaussian</h1>
+    <div class="markdown-body markdown-dark" id="markdown-setup"></div>
+    <canvas class="markdown-body" id="setup"></canvas>
+
+    <div class="markdown-body markdown-dark" id="markdown-splat"></div>
+
+    <div class="markdown-body">
+      <div class="sliders-row">
+        <div>
+          <div class="slider" id="variance-slider"></div>
+          <div class="slider" id="pos-slider"></div>
+          Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
+        </div>
+        <canvas id="draw-elipse"></canvas>
+      </div>
+    </div>
+
+    
+    <div class="markdown-body markdown-dark" id="markdown-splatEdit"></div>
+    <div class="markdown-body">
+      <div class="sliders-row">
+        <div>
+          <div class="slider" id="scale-sliders"></div>
+          <div class="slider" id="rotation-sliders"></div>
+          <div class="slider" id="pos-slider"></div>
+          Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
+        </div>
+        <canvas id="rotate-scale-elipse"></canvas>
+      </div>
+    </div>
+
+    <div class="markdown-body markdown-dark" id="markdown-sphericalHarmonics"></div>
+
+      <div class="btn-group">
+      <a href="journey.html" class="button">Prev Intro</a>
+      <a href="journey-optimization.html" class="button">Next 2. Optimization</a>
+    </div>
+    <script type="module" src="src/journey/mainJourney.ts"></script>
+    <script type="module" src="src/journey/scripts/setup/mainSetup.ts"></script>
+    <script type="module" src="src/journey/scripts/draw/mainElipse.ts"></script>
+    <script type="module" src="src/journey/scripts/drawInstance/mainRotateScale.ts"></script>
+
+    
+  </body>
+</html>
