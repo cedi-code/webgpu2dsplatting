@@ -38,7 +38,8 @@ async function main() {
     vBuilder.add(0, "position", "float32x2")
             .add(1, "scale", "float32x2")
             .add(2, "color", "float32x3")
-            .add(3, "rotation", "float32");
+            .add(3, "rotation", "float32")
+            .add(4, "alpha", "float32");
     
     const pipeLineDesc :  GPURenderPipelineDescriptor = {
         label: 'hardcoded checkerboard triangle',
@@ -115,6 +116,7 @@ async function main() {
         @location(1) scale: vec2f,
         @location(2) color: vec3f,
         @location(3) rotation: f32, 
+        @location(4) alpha: f32,
     };
     */
     for(let i = 0; i < numInstances; i++) {
@@ -127,6 +129,7 @@ async function main() {
             [Math.round(rnd(0,1)), Math.round(rnd(0,1)), Math.round(rnd(0,1))],
                                                         off + att[2].offset);
         instanceValues.set([rnd(0,2*Math.PI)],         off + att[3].offset);
+        instanceValues.set([rnd(0.9, 1.0)],            off + att[4].offset);
     }
 
     ctx.device.queue.writeBuffer(instanceBuff, 0, instanceValues);

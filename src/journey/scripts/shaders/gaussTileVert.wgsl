@@ -2,13 +2,14 @@ struct Splat {
   @location(0) position: vec2f,
   @location(1) scale: vec2f,
   @location(2) color: vec3f,
-  @location(3) rotation: f32, 
+  @location(3) rotation: f32,
+  @location(4) alpha: f32, 
 };
 
 struct SimpleVertexShaderOutput {
     @builtin(position) position: vec4f,
     @location(0) grid: vec2f,
-    @location(1) color: vec3f,
+    @location(1) color: vec4f,
 };
 
 const tile = array<vec2f, 6>(
@@ -45,6 +46,6 @@ fn rotMat(r: f32) -> mat2x2f {
     return SimpleVertexShaderOutput(
         vec4f(posGauss, 1.0 - f32(j+1) / 1000.0, 1.0),
         vec2f(tile[i]),
-        splat.color,
+        vec4f(splat.color, splat.alpha),
     );
 }
