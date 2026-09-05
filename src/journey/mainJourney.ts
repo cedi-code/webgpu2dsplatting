@@ -56,10 +56,14 @@ marked
 }
 )); 
 
+
+// ===
+// this section I generated with gemini
+// ===
 const modules = import.meta.glob('./markdowns/*.md', { query: '?raw', import: 'default' });
 
 for (const [path, loader] of Object.entries(modules)) {
-  // e.g. "./markdowns/intro.md" -> "intro"
+
   const name = path.split('/').pop()?.replace('.md', '');
   const el = document.getElementById(`markdown-${name}`);
 
@@ -68,3 +72,4 @@ for (const [path, loader] of Object.entries(modules)) {
     el.innerHTML = await marked.parse(rawText);
   }
 }
+// ===

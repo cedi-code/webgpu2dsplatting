@@ -8,6 +8,8 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         journey: resolve(__dirname, 'journey.html'),
+        primitive: resolve(__dirname, 'journey-primitive.html'),
+        optimization: resolve(__dirname, 'journey-optimization.html'),
       },
     },
   },
