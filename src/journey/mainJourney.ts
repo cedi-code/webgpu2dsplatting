@@ -60,6 +60,8 @@ import introRaw from './markdowns/intro.md?raw';
 import setupRaw from './markdowns/setup.md?raw';
 import splatRaw from './markdowns/splat.md?raw';
 import splatEditRaw from './markdowns/splatEdit.md?raw';
+import harmonicsRaw from './markdowns/sphericalHarmonics.md?raw';
+
 
 interface MarkdownSection {
   id: string;
@@ -71,6 +73,7 @@ const markdownSections: MarkdownSection[] = [
   { id: 'markdown-setup', rawText: setupRaw },
   { id: 'markdown-drawgauss', rawText: splatRaw },
   { id: 'markdown-elipsoid', rawText: splatEditRaw },
+  { id: 'markdown-harmonics', rawText: harmonicsRaw },
 ];
 
 for (const { id, rawText } of markdownSections) {
