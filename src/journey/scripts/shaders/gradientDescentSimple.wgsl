@@ -18,7 +18,7 @@ fn Loss(q: f32) -> f32 {
     var sum = 0.0;
 
     for(var i = 0u; i < N; i++) {
-        let x = (20.0*f32(i))/f32(N) - 10.0; 
+        let x = (10.0*f32(i))/f32(N) - 5.0; 
         let y = dataY[i];
 
         let diff = (f(x,q) - y);
@@ -40,7 +40,7 @@ fn gradL(q : f32) -> f32 {
         let diff = (f(x,q) - y);
         sum += diff * f(x,q) * (x - q);
     }
-    sum *= 4.0 / f32(N);
+    sum *= 1.0 / f32(N);
 
     return sum;
 }

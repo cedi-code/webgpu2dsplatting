@@ -6,12 +6,47 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import shaderCodeCompute from '../shaders/gradientDescentSimple.wgsl?raw';
 
+
+function drawSillyLoss(loss : Float32Array<ArrayBuffer>, N: number, eps : number) {
+  
+  
+  const canvas = document.getElementById('gd1d') as HTMLCanvasElement;
+  const ctx = canvas.getContext('2d');
+
+  const height = N;
+
+  const maxLoss = Math.max(...loss);
+  const minLoss = 0.00005;
+
+  const y_scaled = (l: number) => {
+    return height * (Math.log(l) - Math.log(eps)) / (Math.log(maxLoss) - Math.log(minLoss));
+  };
+ 
+  if(ctx) {
+    ctx.clearRect(0,0, N, height);
+    ctx.fillStyle = '#fff';
+    for (let x = 0; x < N; ++x) {
+        let l = loss[x];
+        
+        if(l) {
+            let lossLog = y_scaled(Math.max(l,eps));
+            const v = lossLog;
+            ctx.fillRect(x, height - v, 1, v);
+        }
+    }
+  }
+  else {
+    console.log("plot failed");
+  }
+}
+
 async function main() {
 
-    const ctx = await getWebGPUctx({ canvasId: "gd1d"});
+    const ctx = await getWebGPUctx({ canvasId: "compute"});
     if(!ctx) {
         return;
     }
+
 
     const csModule = ctx.device.createShaderModule({
         label: '1d gs module',
@@ -90,14 +125,12 @@ async function main() {
         initalQ : number,
         finalQ: number,
         lossLog: number,
-        lossArr: Float32Array<ArrayBuffer>
     }
 
     const PARAMS_OUT : Output = {
         initalQ : initalGuess,
         finalQ: 0.0,
         lossLog: 0.0,
-        lossArr: new Float32Array(100),
     }
 
     let updateResults = async (params_out : Output) => {
@@ -105,12 +138,11 @@ async function main() {
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
 
-        console.log('in:', input);
-        console.log('out:', result);
         params_out.finalQ = result[0];
         params_out.initalQ = initalGuess;
-        params_out.lossArr = result;
-
+        result[0] = result[1]; // hacky + ugly
+        
+        drawSillyLoss(result, maxSize, 0.01);
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         resultBuffer.unmap();        
     }
@@ -130,7 +162,7 @@ async function main() {
         });
         pass.setPipeline(pipeline);
         pass.setBindGroup(0, bindGroup);
-        pass.dispatchWorkgroups(input.length);
+        pass.dispatchWorkgroups(1);
         pass.end();
 
         // mapping result to my buffer
@@ -144,7 +176,6 @@ async function main() {
     }
 
     await runGD();
-
 
     const PARAMS = {
         stepSize: 0.3,
