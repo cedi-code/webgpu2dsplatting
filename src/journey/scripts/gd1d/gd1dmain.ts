@@ -23,17 +23,34 @@ async function main() {
             module: csModule,
         },
     });
+    const numSamples = 100; // HAS TO BE CONSISTENT WITH SHADER!
+    
+    const ySamples = new Float32Array(numSamples);
 
-    const input = new Float32Array([1,3,5]);
+    ySamples.forEach((_,i) => {
+        let x = (10.0*i)/numSamples - 5.0; 
+        ySamples[i] = Math.exp(-0.25*(x-2.0)*(x-2.0));
+    });
 
+    const maxSize : number = 100;
+    const input = new Float32Array(maxSize);
+    const initalGuess = Math.random()* 5.0 - 2.5;
+    input[0] = initalGuess;
     // creating buffer
     const workBuffer = ctx.device.createBuffer({
-        label: 'my first work buffer',
+        label: 'my loss output buffer',
         size: input.byteLength,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
 
+    const yBuffer = ctx.device.createBuffer({
+        label: 'y samples',
+        size: ySamples.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
     ctx.device.queue.writeBuffer(workBuffer, 0, input);
+    ctx.device.queue.writeBuffer(yBuffer, 0, ySamples);
 
     const resultBuffer = ctx.device.createBuffer({
         label: 'result buffer',
@@ -46,7 +63,8 @@ async function main() {
         label: 'bindGroup workbuffer',
         layout: pipeline.getBindGroupLayout(0),
         entries: [
-            { binding: 0, resource: workBuffer }
+            { binding: 0, resource: workBuffer },
+            { binding: 1, resource: yBuffer },
         ]
     });
 
