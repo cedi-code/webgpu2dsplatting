@@ -1,5 +1,10 @@
+struct Uniform {
+    stepSize : f32,
+};
+
 @group(0) @binding(0) var<storage, read_write> dataOutput: array<f32>;
 @group(0) @binding(1) var<storage, read> dataY: array<f32>;
+@group(0) @binding(2) var<uniform> uniforms : Uniform;
 
 
 fn f(x: f32, q : f32) -> f32 {
@@ -48,7 +53,7 @@ fn gradL(q : f32) -> f32 {
         dataOutput[i] = Loss(q);
 
         let step = gradL(q);
-        q -= 0.3 * step;
+        q -= uniforms.stepSize * step;
 
         if(step == 0.0) {
             break;
