@@ -166,9 +166,22 @@ class UniformBufferDescriptorBuilder {
 
     result : Partial<UniformBufferDescriptor> = {};
 
-    constructor(label: string, usage?: "uniform" | "storage") {
+    constructor(label: string, usage?: "uniform" | "storage", usageCopy?: "copy_src_dst" | "copy_src" | "copy_dst") {
         this.result.label = label;
         this.result.usage = usage == "storage" ? GPUBufferUsage.STORAGE : GPUBufferUsage.UNIFORM;
+        switch(usageCopy) 
+        {
+            case "copy_src_dst":
+                this.result.usage |= GPUBufferUsage.COPY_SRC;
+                this.result.usage |= GPUBufferUsage.COPY_DST;
+                break;
+            case "copy_src":    
+                this.result.usage |= GPUBufferUsage.COPY_SRC;
+                break;
+            case "copy_dst":    
+                this.result.usage |= GPUBufferUsage.COPY_DST;
+                break;
+        }
     }
 
     add(name: string, type: UniformType): UniformBufferDescriptorBuilder {

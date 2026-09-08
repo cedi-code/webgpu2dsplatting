@@ -57,7 +57,7 @@ We now do itterative optimization using gradient descent, meaning updating our i
 $$
     \mu_{t+1} = \mu_t - \eta * \nabla L(\mu_{t})
 $$
-we keep updating until the gradient $\nabla L(\mu_{t}) \approx 0$ reaching a local minima, since our . 
+we keep updating until the gradient $\nabla L(\mu_{t}) \approx 0$ reaching a local minima.
 
 in wgsl gradient descent could look like this:
 ```wgsl
@@ -66,11 +66,14 @@ in wgsl gradient descent could look like this:
   @builtin(global_invocation_id) id: vec3<u32>
 ) {
     let q = rand() * 4.0 - 4.0; // inital guess
-    do {
+    loop {
         let step = gradL(q);
         q -= n * step;
-    } while (step > 0.001);
+        break if (step >= 0.01);
+    }
 
-    workResult[id] = q
+    workResult[id] = q;
 }
 ```
+
+For setting up compute shaders one can follow the wonderful tutorial webgpufundamentals: [Run computations on the GPU](https://webgpufundamentals.org/webgpu/lessons/webgpu-fundamentals.html#a-run-computations-on-the-gpu)
