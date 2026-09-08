@@ -33,20 +33,20 @@ $$
 y^*(x) = e^{-(x-2)^2} \implies \mu^* = 2
 $$
 
-$N$-inputs $x_i$ and outputs $y_i$ are evenly spaced points form the interval [-10, 10]
+$N$-inputs $x_i$ and outputs $y_i$ are evenly spaced points form the interval [-5, 5]
 
 $$
-x_i = \frac{20}{N}i - 10 \quad y_i = y^{*}(x_i), \quad \text{for } i \in \{0, 1, ..., N\}
+x_i = \frac{10}{N}i - 5 \quad y_i = y^{*}(x_i), \quad \text{for } i \in \{0, 1, ..., N\}
 $$
 
 
 We can measures how similar our function $f$ to $y^*$ is by defining a loss function (L2-norm):
 
 $$
-L(\mu) = \sum_{i=0}^{N}(f(x_i; \mu) - y_i)^2
+L(\mu) = \frac{1}{N+1}\sum_{i=0}^{N}(f(x_i; \mu) - y_i)^2
 $$
 
-We start with a random guess for our parameter $\mu_0 \in [10, 10]$. Our goal now is to find the optimal $\mu^{*}$ that approximates our $y_i$ the best, this can be done by minimizing our loss function $L$, so our new goal is:
+We start with a random guess for our parameter $\mu_0 \in [-10, 10]$. Our goal now is to find the optimal $\mu^{*}$ that approximates our $y_i$ the best, this can be done by minimizing our loss function $L$, so our new goal is:
 
 $$
 \operatorname*{arg\,min}_{\mu \in \mathbb{R}} L(\mu)
@@ -62,10 +62,8 @@ we keep updating until the gradient $\nabla L(\mu_{t}) \approx 0$ reaching a loc
 in wgsl gradient descent could look like this:
 ```wgsl
 ...
-@compute @workgroup_size(1) fn gradientDescent(
-  @builtin(global_invocation_id) id: vec3<u32>
-) {
-    let q = rand() * 4.0 - 4.0; // inital guess
+@compute @workgroup_size(1) fn gradientDescent() {
+    let q = rand() * 8.0 - 4.0; // inital guess
     loop {
         let step = gradL(q);
         q -= n * step;
@@ -76,4 +74,33 @@ in wgsl gradient descent could look like this:
 }
 ```
 
-For setting up compute shaders one can follow the wonderful tutorial webgpufundamentals: [Run computations on the GPU](https://webgpufundamentals.org/webgpu/lessons/webgpu-fundamentals.html#a-run-computations-on-the-gpu)
+For setting up compute shaders one can follow the wonderful tutorial webgpufundamentals: [Run computations on the GPU](https://webgpufundamentals.org/webgpu/lessons/webgpu-fundamentals.html#a-run-computations-on-the-gpu).
+
+
+Now what about the line `gradL(q)`? we still have to derrive this term. 
+
+<details>
+  <summary>Show derrivation</summary>
+
+Since $L(\mu)$ is made out of a composition of functions, we have to apply the chain rule:
+
+$$
+\begin{align*}
+\frac{d}{d\mu}L(\mu) & = \frac{d}{d\mu} \sum_{i=0}^{N}(f(x_i; \mu) - y_i)^2 &   \\
+&= \sum_{i=0}^{N}\frac{d}{d\mu} (f(x_i; \mu) - y_i)^2        &   \\
+&= \sum_{i=0}^{N}2(f(x_i; \mu) - y_i)f'(x_i;\mu)             &   \\
+& \\
+
+\frac{d}{d\mu}f(x;\mu) &=  \frac{d}{d\mu}  e^{-(x-\mu)^2} & \\
+&= e^{-(x-\mu)^2}*-\frac{d}{d\mu}(x-\mu)^2 & \\
+&= 2e^{-(x-\mu)^2}(x-\mu) & \\
+\end{align*}
+$$
+
+putting it togheter we get:
+
+$$
+\nabla L(\mu) =  \frac{4}{N+1} \sum_{i=0}^{N}[(f(x_i; \mu) - y_i)f(x_i; \mu) (x_i-\mu)]
+$$
+</details>
+
