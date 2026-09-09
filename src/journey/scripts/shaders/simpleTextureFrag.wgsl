@@ -5,22 +5,27 @@ struct vsOut {
     @location(0) texCoord: vec2f,
 };
 
+struct Uniform {
+    pos: vec2f,
+    scale: vec2f,
+};
+
 @group(0) @binding(0) var ourSampler: sampler;
 @group(0) @binding(1) var ourTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> uniforms : Uniform;
 
 @fragment fn fs(
     in : vsOut
     ) -> @location(0) vec4f {
     
-    let V_inv = mat2x2f(10.0, 0.0, 0.0, 10.0);
 
-    let pNorm = in.p.xy * vec2(1.0/256.0);
+    let pNorm = in.p.xy * vec2f(1.0/128.0);
 
-    let d = pNorm - vec2f(0.5) ;
-    let D2 = dot(d * V_inv, d);
+    let d = pNorm - uniforms.pos;
+    let D2 = dot(d * uniforms.scale, d);
 
     let gauss = exp(-0.5 * D2);
 
     //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
-    return vec4f(gauss, gauss, gauss, 1.0) * textureSample(ourTexture, ourSampler, in.texCoord);
+    return vec4f(0.0, gauss, 0.0, 1.0) + textureSample(ourTexture, ourSampler, in.texCoord);
 }

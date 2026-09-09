@@ -4,9 +4,16 @@ import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBu
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
-import shaderCodeCompute from '../shaders/gradientDescentSimple.wgsl?raw';
+import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
 import simpleTileVert from '../shaders/staticTileVert.wgsl?raw';
 import simpleTextureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
+
+
+async function loadImageBitmap(url : string) {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
+}
 
 async function main() {
 
@@ -31,18 +38,21 @@ async function main() {
 
 
     const fsModule = ctx.device.createShaderModule({
-        label: 'naiv gauss impl',
+        label: 'simple texture frag impl',
         code: simpleTextureFrag 
     });
-
-    const numSamples = 100; // HAS TO BE CONSISTENT WITH SHADER!
-
+    
+    const maxSizeResultBuffer : number = 10;
+    
     const uniBuild = new UniformBufferDescriptorBuilder('gd uniform', "uniform");
-    uniBuild.add('stepSize', 'f32');
-
+    uniBuild.add('stepSize', 'f32');    
     const uniDesc = uniBuild.build();
-
-
+    
+    const uBuilder = new UniformBufferDescriptorBuilder("My Uniform Buffer", "uniform");
+    uBuilder.add("pos", "vec2f")
+            .add("scale", "vec2f");
+    const uDesc = uBuilder.build();
+    
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsFragment = ctx.device.createBindGroupLayout(
         {
@@ -63,6 +73,14 @@ async function main() {
                     multisampled: false,
                 },
             },
+            { // uniforms
+                binding: 2,
+                visibility: GPUShaderStage.FRAGMENT,
+                buffer: {
+                    type: 'uniform',
+                    minBindingSize: uDesc.sizeBytes,
+                },
+                },
             ],
         },
     );
@@ -74,15 +92,16 @@ async function main() {
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
-                minBindingSize: numSamples * Float32Array.BYTES_PER_ELEMENT,
+                minBindingSize: maxSizeResultBuffer * Float32Array.BYTES_PER_ELEMENT,
             },
             },
-            { // dataY
+            { // goal texture
             binding: 1,
             visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'read-only-storage',
-                minBindingSize: numSamples * Float32Array.BYTES_PER_ELEMENT,
+            texture: {
+                    sampleType: "float", // type for 'rgba8unorm'
+                    viewDimension: "2d",
+                    multisampled: false,
             },
             },
             { // uniforms
@@ -155,35 +174,24 @@ async function main() {
     };
     ctx.renderPassDescriptor = renderPassDescriptor;
 
+    const input = new Float32Array(maxSizeResultBuffer);
 
-
+    input[1] = 0.6;
+    input[2] = 0.6;
+    input[3] = 20.0;
+    input[4] = 20.0;
     
-    const ySamples = new Float32Array(numSamples);
 
-    ySamples.forEach((_,i) => {
-        let x = (10.0*i)/numSamples - 5.0; 
-        ySamples[i] = Math.exp(-0.25*(x-2.0)*(x-2.0));
-    });
 
-    const maxSize : number = 100;
-    const input = new Float32Array(maxSize);
-    const initalGuess = Math.random()* 8.0 - 4.0;
-    input[0] = initalGuess;
+
     // creating buffer
     const workBuffer = ctx.device.createBuffer({
-        label: 'my loss output buffer',
+        label: 'my output buffer',
         size: input.byteLength,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
 
-    const yBuffer = ctx.device.createBuffer({
-        label: 'y samples',
-        size: ySamples.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-
     ctx.device.queue.writeBuffer(workBuffer, 0, input);
-    ctx.device.queue.writeBuffer(yBuffer, 0, ySamples);
 
     const resultBuffer = ctx.device.createBuffer({
         label: 'result buffer',
@@ -196,40 +204,41 @@ async function main() {
     bufferManager.init(ctx.device);
 
 
+    const uBuffer = bufferManager.createBuffer(uDesc);
+
+    const uValues = new Float32Array(uDesc.size);
+    const att = uDesc.attributes;
+
+    uValues.set(
+        [input[3], input[4]]
+    , att[1].offset); // variance Mat
+
+    uValues.set(
+        [input[1], input[2]]
+    , att[0].offset); // mean vec
+
+    ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
-    const uniVal = new Float32Array([0.3]);
+    const uniVal = new Float32Array([0.1]); // stepsize
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniVal , 0);
 
     // == texture stuff
 
-    const kTextureWidth = 5;
-    const kTextureHeight = 7;
-    const _ = [255,   0,   0, 255];  // red
-    const y = [255, 255,   0, 255];  // yellow
-    const b = [  0,   0, 255, 255];  // blue
-    const textureData = new Uint8Array([
-        b, _, _, _, _,
-        _, y, y, y, _,
-        _, y, _, _, _,
-        _, y, y, _, _,
-        _, y, _, _, _,
-        _, y, _, _, _,
-        _, _, _, _, _,
-    ].flat());
-
+    const testImageUrl = 'assets/testImage.jpg';
+    const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
-        size: [kTextureWidth, kTextureHeight],
+        label: testImageUrl,
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        size: [source.width, source.height],
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
-    ctx.device.queue.writeTexture(
+    ctx.device.queue.copyExternalImageToTexture(
+        { source, flipY: true },
         { texture },
-        textureData,
-        { bytesPerRow: kTextureWidth * 4 },
-        { width: kTextureWidth, height: kTextureHeight },
+        { width: source.width, height: source.height }
     );
 
     const sampler = ctx.device.createSampler();
@@ -241,7 +250,7 @@ async function main() {
         layout: pipelineCompute.getBindGroupLayout(0),
         entries: [
             { binding: 0, resource: workBuffer },
-            { binding: 1, resource: yBuffer },
+            { binding: 1, resource: texture },
             { binding: 2, resource: uniBuff },
         ]
     });
@@ -252,6 +261,7 @@ async function main() {
         entries: [
             { binding: 0, resource: sampler },
             { binding: 1, resource: texture },
+            { binding: 2, resource: uBuffer },
         ]
     });
 
@@ -262,53 +272,76 @@ async function main() {
     }
 
     const PARAMS_OUT : Output = {
-        initalQ : initalGuess,
+        initalQ : 0.5,
         finalQ: 0.0,
         lossLog: 0.0,
     }
 
-    let updateResults = async (params_out : Output) => {
+    let updateResults = async (params_out : Output) : Promise<Float32Array<ArrayBuffer>> => {
         // read results
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
+        console.log("result", result);
+        params_out.finalQ = result[1];        
+        input.set(result, 0);
 
-        params_out.finalQ = result[0];
-        params_out.initalQ = initalGuess;
-        
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         resultBuffer.unmap();        
+
+        return result;
     }
 
+    render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
 
     let runGD = async () => {
 
-        input[0] = initalGuess;
-        ctx.device.queue.writeBuffer(workBuffer, 0, input);
+        const steps = 1;
+        for(let i = 0; i < steps; i++) {
 
-        const encoder = ctx.device.createCommandEncoder({
-        label: 'doubling encoder',
-        });
-        const pass = encoder.beginComputePass({
-            label: 'doubling compute pass',
-        });
-        pass.setPipeline(pipelineCompute);
-        pass.setBindGroup(0, bindGroup);
-        pass.dispatchWorkgroups(1);
-        pass.end();
+            ctx.device.queue.writeBuffer(workBuffer, 0, input);
 
-        // mapping result to my buffer
-        encoder.copyBufferToBuffer(workBuffer, 0, resultBuffer, 0, resultBuffer.size);
+            const encoder = ctx.device.createCommandEncoder({
+                label: 'gd encoder',
+            });
+            const pass = encoder.beginComputePass({
+                label: 'dumb gradient descent compute pass',
+            });
+            pass.setPipeline(pipelineCompute);
+            pass.setBindGroup(0, bindGroup);
+            pass.dispatchWorkgroups(1);
+            pass.end();
 
-        // run the work lmao
-        const commandBuffer = encoder.finish();
-        ctx.device.queue.submit([commandBuffer]);
+            // mapping result to my buffer
+            encoder.copyBufferToBuffer(workBuffer, 0, resultBuffer, 0, resultBuffer.size);
 
-        updateResults(PARAMS_OUT);
+            // run the work lmao
+            const commandBuffer = encoder.finish();
+            ctx.device.queue.submit([commandBuffer]);
+
+            // this updates the input values, not clean
+            await updateResults(PARAMS_OUT);
+
+
+            uValues.set(
+                [input[3], input[4]]
+            , att[1].offset); // variance Mat
+
+            uValues.set(
+                [input[1], input[2]]
+            , att[0].offset); // mean vec
+
+            ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
+
+            render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
+
+            ctx.device.queue.writeBuffer(workBuffer, 0, input);
+            
+        }
+        
     }
 
-    await runGD();
+    // await runGD();
 
-    render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
 
 
     console.log(ctx.canvas.width );
@@ -316,23 +349,23 @@ async function main() {
 
     // == interactive suff, not really needed
     {
-        const PARAMS = {
-            stepSize: 0.3,
-        };
+        // const PARAMS = {
+        //     stepSize: 0.3,
+        // };
         
         const pane = new Pane({
             container: document.getElementById("gd-sliders") as HTMLElement,
         });
 
-        pane.addBinding(PARAMS, 'stepSize', {
-            min: 0.01,
-            max: 1.0,
-        }).on('change', (ev) => {
-            let s = ev.value;
-            uniVal[0] = s;
-            ctx.device.queue.writeBuffer(uniBuff, 0, uniVal, 0);
-            runGD();
-        });
+        // pane.addBinding(PARAMS, 'stepSize', {
+        //     min: 0.001,
+        //     max: 1.0,
+        // }).on('change', (ev) => {
+        //     let s = ev.value;
+        //     uniVal[0] = s;
+        //     ctx.device.queue.writeBuffer(uniBuff, 0, uniVal, 0);
+        //     runGD();
+        // });
 
         pane.addBinding(PARAMS_OUT, 'initalQ', {
             readonly: true,
@@ -341,7 +374,18 @@ async function main() {
         pane.addBinding(PARAMS_OUT, 'finalQ', {
             readonly: true,
         });
+
+        pane.addButton({
+            title: 'gd step',
+            label: 'step'
+        }).on('click', async () => {
+            await runGD();
+        });
     }
+
+    ctx.device.lost.then((info) => {
+        console.error("Device lost lmao, reason:", info.reason, info.message);
+    });
     
 }
 
