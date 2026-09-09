@@ -4,10 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>webgpu-2dsplatting</title>
+    <link rel="stylesheet" href="mystle.css">
+
   </head>
   <body>
     <h1>Index.html</h1>
     <a href="journey.html">Link to journey</a>
+    <div class="sliders-row">
+        <div>
+          <div class="slider" id="gd-sliders"></div>
+          Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
+        </div>
+        <canvas width="256" height="256" id="main"></canvas>
+      </div>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/journey/scripts/optimization/mainOptimization.ts"></script>
+    
   </body>
 </html>
