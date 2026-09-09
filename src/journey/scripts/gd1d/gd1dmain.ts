@@ -6,40 +6,6 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import shaderCodeCompute from '../shaders/gradientDescentSimple.wgsl?raw';
 
-
-function drawSillyLoss(loss : Float32Array<ArrayBuffer>, N: number, eps : number) {
-  
-  
-  const canvas = document.getElementById('gd1d') as HTMLCanvasElement;
-  const ctx = canvas.getContext('2d');
-
-  const height = N;
-
-  const maxLoss = Math.max(...loss);
-  const minLoss = 0.00005;
-
-  const y_scaled = (l: number) => {
-    return height * (Math.log(l) - Math.log(eps)) / (Math.log(maxLoss) - Math.log(minLoss));
-  };
- 
-  if(ctx) {
-    ctx.clearRect(0,0, N, height);
-    ctx.fillStyle = '#fff';
-    for (let x = 0; x < N; ++x) {
-        let l = loss[x];
-        
-        if(l) {
-            let lossLog = y_scaled(Math.max(l,eps));
-            const v = lossLog;
-            ctx.fillRect(x, height - v, 1, v);
-        }
-    }
-  }
-  else {
-    console.log("plot failed");
-  }
-}
-
 async function main() {
 
     const ctx = await getWebGPUctx({ canvasId: "compute"});
@@ -140,9 +106,7 @@ async function main() {
 
         params_out.finalQ = result[0];
         params_out.initalQ = initalGuess;
-        result[0] = result[1]; // hacky + ugly
         
-        drawSillyLoss(result, maxSize, 0.01);
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         resultBuffer.unmap();        
     }
@@ -151,8 +115,6 @@ async function main() {
 
         input[0] = initalGuess;
         ctx.device.queue.writeBuffer(workBuffer, 0, input);
-
-
 
         const encoder = ctx.device.createCommandEncoder({
         label: 'doubling encoder',
