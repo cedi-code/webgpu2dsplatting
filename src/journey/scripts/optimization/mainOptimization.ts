@@ -50,7 +50,9 @@ async function main() {
     
     const uBuilder = new UniformBufferDescriptorBuilder("My Uniform Buffer", "uniform");
     uBuilder.add("pos", "vec2f")
-            .add("scale", "vec2f");
+            .add("scale", "vec2f")
+            .add("rot", "f32");
+
     const uDesc = uBuilder.build();
     
     // == defining the binding layouts
@@ -183,14 +185,12 @@ async function main() {
 
     const input = new Float32Array(maxSizeResultBuffer);
 
-    input[1] = 0.6;
-    input[2] = 0.6;
-    input[3] = 3.0;
-    input[4] = 3.0;
+    input[1] = 0.5;
+    input[2] = 0.5;
+    input[3] = 0.7;
+    input[4] = 0.7;
+    input[5] = 0.0;
     
-
-
-
     // creating buffer
     const workBuffer = ctx.device.createBuffer({
         label: 'my output buffer',
@@ -223,6 +223,11 @@ async function main() {
     uValues.set(
         [input[1], input[2]]
     , att[0].offset); // mean vec
+
+    uValues.set(
+        [input[5]]
+    , att[2].offset);
+
 
     ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
 
@@ -329,7 +334,6 @@ async function main() {
             // this updates the input values, not clean
             await updateResults(PARAMS_OUT);
 
-
             uValues.set(
                 [input[3], input[4]]
             , att[1].offset); // variance Mat
@@ -337,6 +341,12 @@ async function main() {
             uValues.set(
                 [input[1], input[2]]
             , att[0].offset); // mean vec
+            
+            uValues.set(
+                [input[5]]
+            , att[2].offset);
+
+            console.log("yo rotation", input[5] * (180 / Math.PI));
 
             ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
 

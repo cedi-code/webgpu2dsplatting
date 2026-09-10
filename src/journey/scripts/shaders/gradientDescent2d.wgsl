@@ -8,33 +8,67 @@ struct Uniform {
 @group(0) @binding(3) var<uniform> uniforms : Uniform;
 
 
-fn g(q: vec2f, x : vec2f, s : vec2f) -> f32 {
+struct Params {
+    pos : vec2f,
+    scale : vec2f,
+    rot : f32
+};
 
-    let pNorm = x; // currently a constant but once we switch to vertex gauss tile approach not needed
+struct Grad {  
+    pos : vec2f,
+    scale : vec2f,
+    rot : f32
+};
 
-    let d = pNorm - q;
-    let D2 = dot(d * exp(s), d);
+fn rotMat(r: f32) -> mat2x2f {
+    return mat2x2f(
+        cos(r), sin(r), // column 0
+        -sin(r), cos(r) // column 1
+    ); 
+}
+
+fn g(p : Params, x : vec2f) -> f32 {
+
+    let d = x - p.pos;
+    let a = exp(p.scale) * (transpose(rotMat(p.rot)) * d);
+    let D2 = dot(a, a);
 
     return exp(-0.5 * D2);
 }
 
-fn Loss(q: vec2f, s : vec2f, x: vec2f, imgC: vec4f) -> f32 {
+fn Loss(p : Params, x: vec2f, imgC: vec4f) -> f32 {
 
-    let gColor = vec4f(vec3f(g(q,x,s)), 1.0);
+    let gColor = vec4f(vec3f(g(p,x)), 1.0);
 
     return (gColor.r - imgC.r)*(gColor.r - imgC.r);
 }
 
-fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
+fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
 
-    let gColor = vec4f(vec3f(g(q,x,s)), 1.0);
+    let gColor = vec4f(vec3f(g(p,x)), 1.0);
     let diff = (gColor.r - imgC.r);
-    let dist = (x - q);
+    let dist = (x - p.pos);
 
-    let gradQ = 2.0 * diff * gColor.r * exp(s) * dist;
-    let gradS = -20.0 * diff * gColor.r * dist * dist * exp(s);
+    //  v = R^T*(x-q)
+    let R = rotMat(p.rot);
+    let v = transpose(R)*dist;
 
-    return vec4f(gradQ, gradS);
+    let dLossGauss2 = -2.0 * diff * gColor.r;
+
+    // \Sigma = R * S^2 * R^T
+    let sigma = R * exp(p.scale) * transpose(R);
+
+    // 2 * (g(x) - I) * -0.5 * g(x) * \Sigma * * -2 * (x-q)
+    let gradQ = -1.0 * dLossGauss2 * sigma * dist;
+
+    // 2 * (g(x) - I) * -0.5 * g(x) * 2 * v^t * s * v 
+    let gradS = 10.0 * dLossGauss2 * v * v * exp(p.scale);
+    
+    //d/d\theta (x-u)^T * RSS^TR^T * (x-u) <=>  v^T * (L*S2 - S2*L) * v => dR/d\theta = L*R  => 
+    // 2 * (g(x) - I) * -0.5 * g(x) * 2*v_x*v_y*(s_x^2 - s_y^2)
+    let gradR = 40.0 * dLossGauss2 * v.x * v.y * (exp(p.scale.x) - exp(p.scale.y));
+
+    return Grad(gradQ, gradS, gradR);
 }
 
 
@@ -43,11 +77,13 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
     let size = vec2u(128, 128); // static choosen size
     let initalQ = vec2f(output[1], output[2]);
     let initalS = vec2f(output[3], output[4]);
+    let initalR = output[5];
+    let initalParams = Params(initalQ, initalS, initalR);
     let n = f32(size.y * size.x);
     let sizeSample = vec2f(size);
     
     var currLoss = 0.0;
-    var paramsPartial = vec4(0.0);
+    var paramsPartial = Params(vec2f(0.0), vec2f(0.0), 0.0);
 
     currLoss = 0.0;
     for (var y = 0u; y < size.y; y++) {
@@ -56,29 +92,34 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
             let uv = vec2f(vec2u(x, y)) / sizeSample;
             let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
             // loss
-            currLoss += Loss(initalQ, initalS, uv, color);
+            currLoss += Loss(initalParams, uv, color);
 
             // params
-            paramsPartial += GradLoss_Q_S(initalQ, initalS, uv, color);            
+
+            let grad = GradLoss_Q_S(initalParams, uv, color);  
+            paramsPartial.pos += grad.pos;
+            paramsPartial.scale += grad.scale;
+            paramsPartial.rot += grad.rot;
+
         }
     }
     currLoss /= n;
-    paramsPartial /= n;
 
 
-    let step = paramsPartial;
-    
-    let newQ = initalQ - uniforms.stepSize * step.xy;
-    let newS = initalS - uniforms.stepSize * step.zw;
+    let stepQ = paramsPartial.pos / n;
+    let stepS = paramsPartial.scale / n;
+    let stepR = paramsPartial.rot / n;
+
+
+    let newQ = initalQ - uniforms.stepSize * stepQ;
+    let newS = initalS - uniforms.stepSize * stepS;
+    let newR = initalR - uniforms.stepSize * stepR;
 
     output[0] = currLoss;
     output[1] = newQ.x;
     output[2] = newQ.y;
     output[3] = newS.x;
     output[4] = newS.y;
-
-    output[7] = sizeSample.x; 
-    output[8] = sizeSample.y;
-    output[9] = uniforms.stepSize * length(step);
+    output[5] = newR;
     
 }
