@@ -19,7 +19,7 @@ struct Uniform {
     ) -> @location(0) vec4f {
     
 
-    let pNorm = in.p.xy * vec2f(1.0/128.0);
+    let pNorm = in.p.xy * vec2f(1.0/256.0);
 
     let d = pNorm - uniforms.pos;
     let D2 = dot(d * uniforms.scale, d);
@@ -27,5 +27,6 @@ struct Uniform {
     let gauss = exp(-0.5 * D2);
 
     //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
-    return vec4f(0.0, gauss, 0.0, 1.0) + textureSample(ourTexture, ourSampler, in.texCoord);
+    let red = select(0.0, gauss, gauss > 0.9);
+    return vec4f(red, gauss - red, 0.0, 1.0) * textureSample(ourTexture, ourSampler, in.texCoord);
 }

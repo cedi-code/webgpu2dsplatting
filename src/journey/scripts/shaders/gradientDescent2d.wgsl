@@ -3,8 +3,9 @@ struct Uniform {
 };
 
 @group(0) @binding(0) var<storage, read_write> output: array<f32>;
-@group(0) @binding(1) var goalTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> uniforms : Uniform;
+@group(0) @binding(1) var ourSampler: sampler;
+@group(0) @binding(2) var goalTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> uniforms : Uniform;
 
 
 fn g(q: vec2f, x : vec2f, s : vec2f) -> f32 {
@@ -30,9 +31,9 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
     let diff = (gColor.r - imgC.r);
     let dist = (x - q);
 
-    
+    // punish gColor.r > imgC.r
     let gradQ = 2.0 * diff * gColor.r * s * dist;
-    let gradS = -1.0 * diff * gColor.r * dist * dist;
+    let gradS = -9000.0 * diff * gColor.r * dist * dist;
 
     return vec4f(gradQ, gradS);
 }
@@ -40,11 +41,11 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
 
 @compute @workgroup_size(1) fn computeGD() {
 
-    let size = textureDimensions(goalTexture, 0);
+    let size = vec2u(128, 128); // static choosen size
     let initalQ = vec2f(output[1], output[2]);
     let initalS = vec2f(output[3], output[4]);
     let n = f32(size.y * size.x);
-    let sizeTex = vec2f(vec2u(size.x, size.y));
+    let sizeSample = vec2f(size);
     
     var currLoss = 0.0;
     var paramsPartial = vec4(0.0);
@@ -52,14 +53,14 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
     currLoss = 0.0;
     for (var y = 0u; y < size.y; y++) {
         for (var x = 0u; x < size.x; x++) {
-            let position = vec2u(x, y);
-            let color = textureLoad(goalTexture, position, 0);
-            let posNorm = vec2f(position) / sizeTex;
+
+            let uv = vec2f(vec2u(x, y)) / sizeSample;
+            let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
             // loss
-            currLoss += Loss(initalQ, initalS, posNorm, color);
+            currLoss += Loss(initalQ, initalS, uv, color);
 
             // params
-            paramsPartial += GradLoss_Q_S(initalQ, initalS, posNorm, color);            
+            paramsPartial += GradLoss_Q_S(initalQ, initalS, uv, color);            
         }
     }
     currLoss /= n;
@@ -77,8 +78,8 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
     output[3] = newS.x;
     output[4] = newS.y;
 
-    output[7] = sizeTex.x; 
-    output[8] = sizeTex.y;
+    output[7] = sizeSample.x; 
+    output[8] = sizeSample.y;
     output[9] = uniforms.stepSize * length(step);
     
 }

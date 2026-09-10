@@ -95,8 +95,15 @@ async function main() {
                 minBindingSize: maxSizeResultBuffer * Float32Array.BYTES_PER_ELEMENT,
             },
             },
-            { // goal texture
+            {
             binding: 1,
+            visibility: GPUShaderStage.COMPUTE,
+            sampler: {
+                    type: "filtering", // type for 'rgba8unorm'
+                },
+            },
+            { // goal texture
+            binding: 2,
             visibility: GPUShaderStage.COMPUTE,
             texture: {
                     sampleType: "float", // type for 'rgba8unorm'
@@ -105,7 +112,7 @@ async function main() {
             },
             },
             { // uniforms
-            binding: 2,
+            binding: 3,
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'uniform',
@@ -250,8 +257,9 @@ async function main() {
         layout: pipelineCompute.getBindGroupLayout(0),
         entries: [
             { binding: 0, resource: workBuffer },
-            { binding: 1, resource: texture },
-            { binding: 2, resource: uniBuff },
+            { binding: 1, resource: sampler },
+            { binding: 2, resource: texture },
+            { binding: 3, resource: uniBuff },
         ]
     });
 
@@ -295,7 +303,7 @@ async function main() {
 
     let runGD = async () => {
 
-        const steps = 1;
+        const steps = 10;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(workBuffer, 0, input);
@@ -340,12 +348,6 @@ async function main() {
         
     }
 
-    // await runGD();
-
-
-
-    console.log(ctx.canvas.width );
-    console.log(ctx.canvas.height);
 
     // == interactive suff, not really needed
     {
