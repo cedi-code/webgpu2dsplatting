@@ -185,8 +185,8 @@ async function main() {
 
     input[1] = 0.6;
     input[2] = 0.6;
-    input[3] = 20.0;
-    input[4] = 20.0;
+    input[3] = 3.0;
+    input[4] = 3.0;
     
 
 

@@ -22,7 +22,7 @@ struct Uniform {
     let pNorm = in.p.xy * vec2f(1.0/256.0);
 
     let d = pNorm - uniforms.pos;
-    let D2 = dot(d * uniforms.scale, d);
+    let D2 = dot(d * exp(uniforms.scale), d);
 
     let gauss = exp(-0.5 * D2);
 

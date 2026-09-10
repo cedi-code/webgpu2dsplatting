@@ -13,7 +13,7 @@ fn g(q: vec2f, x : vec2f, s : vec2f) -> f32 {
     let pNorm = x; // currently a constant but once we switch to vertex gauss tile approach not needed
 
     let d = pNorm - q;
-    let D2 = dot(d * s, d);
+    let D2 = dot(d * exp(s), d);
 
     return exp(-0.5 * D2);
 }
@@ -31,9 +31,8 @@ fn GradLoss_Q_S(q: vec2f, s: vec2f, x: vec2f, imgC: vec4f) -> vec4f {
     let diff = (gColor.r - imgC.r);
     let dist = (x - q);
 
-    // punish gColor.r > imgC.r
-    let gradQ = 2.0 * diff * gColor.r * s * dist;
-    let gradS = -9000.0 * diff * gColor.r * dist * dist;
+    let gradQ = 2.0 * diff * gColor.r * exp(s) * dist;
+    let gradS = -20.0 * diff * gColor.r * dist * dist * exp(s);
 
     return vec4f(gradQ, gradS);
 }
