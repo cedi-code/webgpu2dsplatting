@@ -51,7 +51,8 @@ async function main() {
     const uBuilder = new UniformBufferDescriptorBuilder("My Uniform Buffer", "uniform");
     uBuilder.add("pos", "vec2f")
             .add("scale", "vec2f")
-            .add("rot", "f32");
+            .add("rot", "f32")
+            .add("color", "vec3f");
 
     const uDesc = uBuilder.build();
     
@@ -185,11 +186,16 @@ async function main() {
 
     const input = new Float32Array(maxSizeResultBuffer);
 
-    input[1] = 0.5;
-    input[2] = 0.5;
-    input[3] = 0.7;
-    input[4] = 0.7;
-    input[5] = 0.0;
+    input[1] = 0.5; // pos x
+    input[2] = 0.5; // pos y
+    input[3] = 0.7; // scale x
+    input[4] = 0.7; // scale y
+    input[5] = 0.0; // rot rad
+    input[6] = 0.0; // red
+    input[7] = 8.0; // green
+    input[8] = 8.0; // blue
+    input[9] = 1.0; // alpha
+
     
     // creating buffer
     const workBuffer = ctx.device.createBuffer({
@@ -227,6 +233,10 @@ async function main() {
     uValues.set(
         [input[5]]
     , att[2].offset);
+
+    uValues.set(
+        [input[6], input[7], input[8]]
+    , att[3].offset);
 
 
     ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
@@ -345,6 +355,10 @@ async function main() {
             uValues.set(
                 [input[5]]
             , att[2].offset);
+
+            uValues.set(
+                [input[6], input[7], input[8]]
+            , att[3].offset);
 
             console.log("yo rotation", input[5] * (180 / Math.PI));
 

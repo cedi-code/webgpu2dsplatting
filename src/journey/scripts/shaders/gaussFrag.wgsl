@@ -13,5 +13,5 @@ struct SimpleVertexShaderOutput {
     let alpha : f32 = gauss * c.a;
 
 
-    return vec4f(vec3f(c.rgb) * alpha, gauss * alpha);
+    return vec4f(vec3f(c.rgb) * alpha,  alpha);
 }
