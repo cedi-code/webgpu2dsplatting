@@ -43,7 +43,7 @@ fn g(p : Params, x : vec2f) -> f32 {
 
 @group(0) @binding(0) var ourSampler: sampler;
 @group(0) @binding(1) var ourTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> uni : Params;
+@group(0) @binding(2) var<storage, read_write> output: array<Params>;
 
 @fragment fn fs(
     in : vsOut
@@ -51,11 +51,19 @@ fn g(p : Params, x : vec2f) -> f32 {
     
 
     let pNorm = in.p.xy * vec2f(1.0/256.0);
+    
+    var resultColor = vec4f(0.0);
 
-    let gauss = g(uni, pNorm);
-    let color = vecSigmoid(uni.color) * gauss;
+    for(var  i = 0; i < 1; i++) {
+        let gauss = g(output[i], pNorm);
+        let color = vecSigmoid(output[i].color) * gauss;
 
-    //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
-    let red = select(0.0, gauss, gauss > 0.9);
-    return vec4f(color, 1.0) * textureSample(ourTexture, ourSampler, in.texCoord);
+        //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
+        let red = select(0.0, gauss, gauss > 0.9);
+
+        // this is sloppy but just for testing
+        resultColor += vec4f(color, 1.0) * textureSample(ourTexture, ourSampler, in.texCoord);
+    }
+    return resultColor;
+
 }

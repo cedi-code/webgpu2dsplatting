@@ -42,7 +42,10 @@ async function main() {
         code: simpleTextureFrag 
     });
     
-    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', 2);
+    // number of splats
+    const numParams = 1;
+
+    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numParams);
     paramBuilder.add('pos', "vec2f")
                 .add('scale', "vec2f")
                 .add('rot', "f32")
@@ -55,16 +58,7 @@ async function main() {
     const uniBuild = new UniformBufferDescriptorBuilder('gd uniform', "uniform");
     uniBuild.add('stepSize', 'f32');    
     const uniDesc = uniBuild.build();
-    
-    const uBuilder = new UniformBufferDescriptorBuilder("My Uniform Buffer", "uniform");
-    uBuilder.add('pos', "vec2f")
-            .add('scale', "vec2f")
-            .add('rot', "f32")
-            .add('color', "vec3f")
-            .add('alpha', "f32");
-
-    const uDesc = uBuilder.build();
-    
+        
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsFragment = ctx.device.createBindGroupLayout(
         {
@@ -89,8 +83,8 @@ async function main() {
                 binding: 2,
                 visibility: GPUShaderStage.FRAGMENT,
                 buffer: {
-                    type: 'uniform',
-                    minBindingSize: uDesc.sizeBytes,
+                    type: 'storage',
+                    minBindingSize: paramDesc.sizeBytes,
                 },
                 },
             ],
@@ -223,20 +217,6 @@ async function main() {
 
     // == uniform stuff for interaction ==
 
-    const uBuffer = bufferManager.createBuffer(uDesc);
-
-    const uValues = new Float32Array(uDesc.size);
-    const att = uDesc.attributes;
-
-    let setResultInUnfirom = (input : Float32Array<ArrayBuffer>, index : number) => {
-        let startI = paramDesc.unitSize! * index;
-        let endI = startI + uValues.length;
-        uValues.set(input.subarray(startI, endI), 0);
-        ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
-    }
-
-    setResultInUnfirom(input,0);
-
     const uniBuff = bufferManager.createBuffer(uniDesc);
     const uniVal = new Float32Array([0.1]); // stepsize
     
@@ -280,7 +260,7 @@ async function main() {
         entries: [
             { binding: 0, resource: sampler },
             { binding: 1, resource: texture },
-            { binding: 2, resource: uBuffer },
+            { binding: 2, resource: paramBuffer },
         ]
     });
 
@@ -341,11 +321,10 @@ async function main() {
             // this updates the input values, not clean
             await updateResults(PARAMS_OUT);
 
-            setResultInUnfirom(input, 0);
+            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
             render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
 
-            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
             
         }
         
