@@ -30,13 +30,12 @@ fn rotMat(r: f32) -> mat2x2f {
     ); 
 }
 
-
 fn dSigmoid(x : f32) -> f32 {
-    return exp(-x + 4) / ((1.0 + exp(-x + 4))*(1.0 + exp(-x + 4)));
+    return exp(-x + 4.0) / ((1.0 + exp(-x + 4.0))*(1.0 + exp(-x + 4.0)));
 }
 
 fn sigmoid(x : f32) -> f32 {
-    return 1.0 / (1.0 + exp(-x + 4));
+    return 1.0 / (1.0 + exp(-x + 4.0));
 }
 
 fn vecSigmoid(x : vec3f) -> vec3f {
@@ -56,18 +55,18 @@ fn g(p : Params, x : vec2f) -> f32 {
     return exp(-0.5 * D2);
 }
 
-fn Loss(p : Params, x: vec2f, imgC: vec4f) -> f32 {
-
-    let gauss = g(p,x);
-    let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
-
-    return ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;;
+fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
+    return (
+        (gColor.r - imgC.r) + 
+        (gColor.g - imgC.g) + 
+        (gColor.b - imgC.b)
+    ) / 3.0;;
 }
 
-fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
+fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f32, oneMinusAlpha : f32) -> Grad {
 
     let gauss = g(p,x);
-    let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
+    // let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
     let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
     let dist = (x - p.pos);
 
@@ -91,12 +90,16 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
     let gradR = 40.0 * dLossGauss2 * v.x * v.y * (exp(p.scale.x) - exp(p.scale.y));
 
     let gradC = vec3f(
-        50.0 * (gColor.r - imgC.r) * dSigmoid(p.color.r) * p.alpha * gauss,
-        50.0 * (gColor.g - imgC.g) * dSigmoid(p.color.r) * p.alpha * gauss,
-        50.0 * (gColor.b - imgC.b) * dSigmoid(p.color.r) * p.alpha * gauss,
+        50.0 * (gColor.r - imgC.r) * dSigmoid(p.color.r) * sigmoid(p.alpha) * gauss,
+        50.0 * (gColor.g - imgC.g) * dSigmoid(p.color.g) * sigmoid(p.alpha) * gauss,
+        50.0 * (gColor.b - imgC.b) * dSigmoid(p.color.b) * sigmoid(p.alpha) * gauss,
     );
 
-    return Grad(gradQ, gradS, gradR, gradC, 0.0);
+    // alpha gradient
+    // 
+    let gradA = 50.0 * 2.0 * diff * (gauss - background) * oneMinusAlpha * dSigmoid(p.alpha);    
+
+    return Grad(gradQ, gradS, gradR, gradC, gradA);
 }
 
 
@@ -106,9 +109,10 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
     let n = f32(size.y * size.x);
     let sizeSample = vec2f(size);
     
-    for(var i = 0; i < 2; i++) {
+    const nGauss = 2;
 
-        let initalParams = output[i];
+    var gradients = array<Grad, nGauss>();
+
         var currLoss = 0.0;
         var paramsPartial = Params(vec2f(0.0), vec2f(0.0), 0.0, vec3f(0.0), 0.0);
 
@@ -119,35 +123,61 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
                 let uv = vec2f(vec2u(x, y)) / sizeSample;
                 let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
                 let colorPreMult = vec4f(color.rgb * color.a, color.a);
+                
+                var gColor = vec4f(vec3f(0.0), 1.0);
+
+                var backgrounds = array<f32, nGauss>();
+
+                for(var i = 0; i < nGauss; i++) {
+                    let p = output[i];
+                    
+                    let gauss = g(p,uv);
+                    let alpha = gauss * sigmoid(p.alpha);
+
+                    backgrounds[i] = (gColor.r + gColor.g + gColor.b) / 3.0;
+                    
+                    gColor = alpha * vec4f(vecSigmoid(p.color), 1.0) + (1.0 - alpha) * gColor;
+                }
+
                 // loss
-                currLoss += Loss(initalParams, uv, color);
+                currLoss += Loss(gColor, color);
+                
+                var oneMinusAlpha = 1.0;
+                for(var i = nGauss-1; i >= 0; i--) {
+                    let p = output[i];
+                    
+                    // params
+                    let grad = GradLoss_Q_S(p, uv, colorPreMult, gColor, backgrounds[i], oneMinusAlpha); 
 
-                // params
-                let grad = GradLoss_Q_S(initalParams, uv, colorPreMult); 
-
-                paramsPartial.pos += grad.pos;
-                paramsPartial.scale += grad.scale;
-                paramsPartial.rot += grad.rot;
-                paramsPartial.color += grad.color;
-            }
+                    oneMinusAlpha *= (1.0 - g(p, uv) * sigmoid(p.alpha));
+                    
+                    gradients[i].pos += grad.pos;
+                    gradients[i].scale += grad.scale;
+                    gradients[i].rot += grad.rot;
+                    gradients[i].color += grad.color;
+                    gradients[i].alpha += grad.alpha;
+                
+                }
+                }
         }
         currLoss /= n;
 
+        for(var i = 0; i < nGauss; i++) {
+            let initalParams = output[i];
+            
+            let stepQ = gradients[i].pos / n;
+            let stepS = gradients[i].scale / n;
+            let stepR = gradients[i].rot / n;
+            let stepC = gradients[i].color / n;
+            let stepA = gradients[i].alpha / n;
 
-        let stepQ = paramsPartial.pos / n;
-        let stepS = paramsPartial.scale / n;
-        let stepR = paramsPartial.rot / n;
-        let stepC = paramsPartial.color / n;
-        let stepA = paramsPartial.alpha / n;
+            // this is just a vector, when optimizing, no need to convert it
+            let newQ = initalParams.pos - uniforms.stepSize * stepQ;
+            let newS = initalParams.scale - uniforms.stepSize * stepS;
+            let newR = initalParams.rot - uniforms.stepSize * stepR;
+            let newC = initalParams.color - uniforms.stepSize * stepC;
+            let newA = initalParams.alpha - uniforms.stepSize * stepA;
 
-        // this is just a vector, when optimizing, no need to convert it
-        let newQ = initalParams.pos - uniforms.stepSize * stepQ;
-        let newS = initalParams.scale - uniforms.stepSize * stepS;
-        let newR = initalParams.rot - uniforms.stepSize * stepR;
-        let newC = initalParams.color - uniforms.stepSize * stepC;
-        let newA = initalParams.alpha - uniforms.stepSize * stepA;
-
-        output[i] = Params(newQ, newS, newR, newC, newA);
+            output[i] = Params(newQ, newS, newR, newC, newA);
+        }
     }
-    
-}

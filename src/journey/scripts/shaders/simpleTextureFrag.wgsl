@@ -21,7 +21,7 @@ fn rotMat(r: f32) -> mat2x2f {
 }
 
 fn sigmoid(x : f32) -> f32 {
-    return 1.0 / (1.0 + exp(-x + 4));
+    return 1.0 / (1.0 + exp(-x + 4.0));
 }
 
 fn vecSigmoid(x : vec3f) -> vec3f {
@@ -52,7 +52,7 @@ fn g(p : Params, x : vec2f) -> f32 {
 
     let pNorm = in.p.xy * vec2f(1.0/256.0);
     
-    var resultColor = vec4f(0.0);
+    var resultColor = 1.0 * textureSample(ourTexture, ourSampler, in.texCoord);;
 
     for(var  i = 0; i < 2; i++) {
         let gauss = g(output[i], pNorm);
@@ -61,8 +61,10 @@ fn g(p : Params, x : vec2f) -> f32 {
         //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
         let center = select(vec3f(0.0),vec3f(1.0)-color, gauss > 0.98);
 
+        let alpha = sigmoid(output[i].alpha) * gauss;
+
         // this is sloppy but just for testing
-        resultColor += vec4f(color+center, 1.0) + 0.1 * textureSample(ourTexture, ourSampler, in.texCoord);
+        resultColor = alpha * vec4f(color+center, 1.0) + (1.0 - alpha) * resultColor;
     }
     return resultColor;
 

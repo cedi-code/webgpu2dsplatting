@@ -16,6 +16,10 @@ async function loadImageBitmap(url : string) {
     return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
 }
 
+function sigmoid(x : number) : number {
+    return 1.0 / (1.0 + Math.exp(-x + 4.0));
+}
+
 type FlatParams = {
     posX: number;
     posY: number;
@@ -40,13 +44,13 @@ function parseParams(data : Float32Array, desc : UniformBufferDescriptor, round?
     return {
             posX:   r(data[posOff]),
             posY:   r(data[posOff + 1]),
-            scaleX: r(data[scaleOff]),
-            scaleY: r(data[scaleOff + 1]),
+            scaleX: r(Math.exp(data[scaleOff])),
+            scaleY: r(Math.exp(data[scaleOff + 1])),
             rot:    r(data[rotOff]),
-            r:      r(data[colorOff]),
-            g:      r(data[colorOff + 1]),
-            b:      r(data[colorOff + 2]),
-            alpha:  r(data[alphaOff]),
+            r:      r(sigmoid(data[colorOff])),
+            g:      r(sigmoid(data[colorOff + 1])),
+            b:      r(sigmoid(data[colorOff + 2])),
+            alpha:  r(sigmoid(data[alphaOff])),
         };
 }
 
@@ -242,14 +246,14 @@ async function main() {
     input.set([1.5, 1.5], scaleOff);
     input.set([0.0], rotOff);
     input.set([8.0, 1.0, 1.0], colorOff);
-    input.set([1.0], alphaOff);
+    input.set([4.0], alphaOff);
 
     // gauss 2
     input.set([0.3, 0.6], nextUnit + posOff);
     input.set([0.7, 0.7], nextUnit + scaleOff);
     input.set([0.0], nextUnit + rotOff);
     input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
-    input.set([1.0], nextUnit + alphaOff);
+    input.set([4.0], nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
@@ -349,7 +353,7 @@ async function main() {
 
     let runGD = async () => {
 
-        const steps = 10;
+        const steps = 30;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
