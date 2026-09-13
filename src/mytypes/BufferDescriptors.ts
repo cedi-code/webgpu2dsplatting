@@ -16,6 +16,9 @@ export interface VertexBufferDescriptor extends BufferDescriptor {
 export interface UniformBufferDescriptor extends BufferDescriptor {
     attributes: UniformMember[];
     size: number;
+    unitSize?: number;
+    unitSizeBytes?: number;
+    count?: number;
 }
 
 export type VertexAttribute = {

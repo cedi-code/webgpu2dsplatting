@@ -161,12 +161,14 @@ class VertexBufferDescriptorBuilder {
 }
 
 
-// ARRAY IS NOT SUPPORTED YET
 class UniformBufferDescriptorBuilder {
 
     result : Partial<UniformBufferDescriptor> = {};
 
-    constructor(label: string, usage?: "uniform" | "storage", usageCopy?: "copy_src_dst" | "copy_src" | "copy_dst") {
+    // would be cleaner if this is a static "create" method and have constructor take the descriptor object
+
+
+    constructor(label: string, usage?: "uniform" | "storage", usageCopy?: "copy_src_dst" | "copy_src" | "copy_dst", count?: number) {
         this.result.label = label;
         this.result.usage = usage == "storage" ? GPUBufferUsage.STORAGE : GPUBufferUsage.UNIFORM;
         switch(usageCopy) 
@@ -182,6 +184,7 @@ class UniformBufferDescriptorBuilder {
                 this.result.usage |= GPUBufferUsage.COPY_DST;
                 break;
         }
+        this.result.count = count;
     }
 
     add(name: string, type: UniformType): UniformBufferDescriptorBuilder {
@@ -225,13 +228,37 @@ class UniformBufferDescriptorBuilder {
         // padding in the end
         currOffset = Math.ceil(currOffset / maxAlign) * maxAlign;
 
-        return {
-            label: this.result.label,
-            attributes: this.result.attributes,
-            usage: this.result.usage,
-            sizeBytes: currOffset,
-            size: currOffset / 4,
-        };
+        // non Array case
+        if(this.result.count === undefined) {
+            return {
+                label: this.result.label,
+                attributes: this.result.attributes,
+                usage: this.result.usage,
+                sizeBytes: currOffset,
+                size: currOffset / 4,
+            };
+        }
+        // array case
+        else if(this.result.usage & GPUBufferUsage.STORAGE)
+        {
+            let count = this.result.count;
+            return {
+                label: this.result.label,
+                attributes: this.result.attributes,
+                usage: this.result.usage,
+                sizeBytes: currOffset * count,
+                size: currOffset * count / 4,
+                unitSize: currOffset / 4,
+                unitSizeBytes: currOffset,
+                count: count
+            };
+
+        }
+        else {
+            throw Error("used count for uniform buffer, not supported!")
+        }
+
+
     }
 }
 
