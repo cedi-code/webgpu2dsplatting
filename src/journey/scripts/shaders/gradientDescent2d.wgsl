@@ -2,12 +2,6 @@ struct Uniform {
     stepSize : f32,
 };
 
-@group(0) @binding(0) var<storage, read_write> output: array<f32>;
-@group(0) @binding(1) var ourSampler: sampler;
-@group(0) @binding(2) var goalTexture: texture_2d<f32>;
-@group(0) @binding(3) var<uniform> uniforms : Uniform;
-
-
 struct Params {
     pos : vec2f,
     scale : vec2f,
@@ -15,6 +9,11 @@ struct Params {
     color : vec3f,
     alpha: f32,
 };
+
+@group(0) @binding(0) var<storage, read_write> output: array<Params>;
+@group(0) @binding(1) var ourSampler: sampler;
+@group(0) @binding(2) var goalTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> uniforms : Uniform;
 
 struct Grad {  
     pos : vec2f,
@@ -59,15 +58,16 @@ fn g(p : Params, x : vec2f) -> f32 {
 
 fn Loss(p : Params, x: vec2f, imgC: vec4f) -> f32 {
 
-    let gColor = vec4f(vec3f(g(p,x)), 1.0);
+    let gauss = g(p,x);
+    let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
 
-    return (gColor.r - imgC.r)*(gColor.r - imgC.r);
+    return ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;;
 }
 
 fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
 
-    let g = g(p,x);
-    let gColor = vec4f(vecSigmoid(p.color)*p.alpha*g, p.alpha);
+    let gauss = g(p,x);
+    let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
     let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
     let dist = (x - p.pos);
 
@@ -75,7 +75,7 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
     let R = rotMat(p.rot);
     let v = transpose(R)*dist;
 
-    let dLossGauss2 = -2.0 * diff;
+    let dLossGauss2 = -2.0 * diff * gauss;
 
     // \Sigma = R * S^2 * R^T
     let sigma = R * exp(p.scale) * transpose(R);
@@ -91,9 +91,9 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
     let gradR = 40.0 * dLossGauss2 * v.x * v.y * (exp(p.scale.x) - exp(p.scale.y));
 
     let gradC = vec3f(
-        20.0 * (gColor.r - imgC.r) * dSigmoid(p.color.r) * p.alpha * g,
-        20.0 * (gColor.g - imgC.g) * dSigmoid(p.color.r) * p.alpha * g,
-        20.0 * (gColor.b - imgC.b) * dSigmoid(p.color.r) * p.alpha * g,
+        50.0 * (gColor.r - imgC.r) * dSigmoid(p.color.r) * p.alpha * gauss,
+        50.0 * (gColor.g - imgC.g) * dSigmoid(p.color.r) * p.alpha * gauss,
+        50.0 * (gColor.b - imgC.b) * dSigmoid(p.color.r) * p.alpha * gauss,
     );
 
     return Grad(gradQ, gradS, gradR, gradC, 0.0);
@@ -103,13 +103,9 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
 @compute @workgroup_size(1) fn computeGD() {
 
     let size = vec2u(128, 128); // static choosen size
-    let initalQ = vec2f(output[1], output[2]);
-    let initalS = vec2f(output[3], output[4]);
-    let initalR = output[5];
-    let initalColor = vec3f(output[6], output[7], output[8]);
-    let initalAlpha = output[9];
 
-    let initalParams = Params(initalQ, initalS, initalR, initalColor, initalAlpha);
+
+    let initalParams = output[0];
     let n = f32(size.y * size.x);
     let sizeSample = vec2f(size);
     
@@ -146,23 +142,13 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
     let stepC = paramsPartial.color / n;
     let stepA = paramsPartial.alpha / n;
 
+    // this is just a vector, when optimizing, no need to convert it
+    let newQ = initalParams.pos - uniforms.stepSize * stepQ;
+    let newS = initalParams.scale - uniforms.stepSize * stepS;
+    let newR = initalParams.rot - uniforms.stepSize * stepR;
+    let newC = initalParams.color - uniforms.stepSize * stepC;
+    let newA = initalParams.alpha - uniforms.stepSize * stepA;
 
-    let newQ = initalQ - uniforms.stepSize * stepQ;
-    let newS = initalS - uniforms.stepSize * stepS;
-    let newR = initalR - uniforms.stepSize * stepR;
-    let newC = initalColor - uniforms.stepSize * stepC;
-    let newA = initalAlpha - uniforms.stepSize * stepA;
-
-
-    output[0] = currLoss;
-    output[1] = newQ.x;
-    output[2] = newQ.y;
-    output[3] = newS.x;
-    output[4] = newS.y;
-    output[5] = newR;
-    output[6] = newC.r;
-    output[7] = newC.g;
-    output[8] = newC.b;
-    output[9] = newA;
+    output[0] = Params(newQ, newS, newR, newC, newA);
     
 }

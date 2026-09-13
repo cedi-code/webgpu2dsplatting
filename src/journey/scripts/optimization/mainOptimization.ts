@@ -42,17 +42,26 @@ async function main() {
         code: simpleTextureFrag 
     });
     
-    const maxSizeResultBuffer : number = 10;
+    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', 2);
+    paramBuilder.add('pos', "vec2f")
+                .add('scale', "vec2f")
+                .add('rot', "f32")
+                .add('color', "vec3f")
+                .add('alpha', "f32");
+    const paramDesc = paramBuilder.build();
+
+    console.log(paramDesc);
     
     const uniBuild = new UniformBufferDescriptorBuilder('gd uniform', "uniform");
     uniBuild.add('stepSize', 'f32');    
     const uniDesc = uniBuild.build();
     
     const uBuilder = new UniformBufferDescriptorBuilder("My Uniform Buffer", "uniform");
-    uBuilder.add("pos", "vec2f")
-            .add("scale", "vec2f")
-            .add("rot", "f32")
-            .add("color", "vec3f");
+    uBuilder.add('pos', "vec2f")
+            .add('scale', "vec2f")
+            .add('rot', "f32")
+            .add('color', "vec3f")
+            .add('alpha', "f32");
 
     const uDesc = uBuilder.build();
     
@@ -95,7 +104,7 @@ async function main() {
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
-                minBindingSize: maxSizeResultBuffer * Float32Array.BYTES_PER_ELEMENT,
+                minBindingSize: paramDesc.sizeBytes,
             },
             },
             {
@@ -184,62 +193,49 @@ async function main() {
     };
     ctx.renderPassDescriptor = renderPassDescriptor;
 
-    const input = new Float32Array(maxSizeResultBuffer);
-
-    input[1] = 0.5; // pos x
-    input[2] = 0.5; // pos y
-    input[3] = 0.7; // scale x
-    input[4] = 0.7; // scale y
-    input[5] = 0.0; // rot rad
-    input[6] = 0.0; // red
-    input[7] = 8.0; // green
-    input[8] = 8.0; // blue
-    input[9] = 1.0; // alpha
-
-    
     // creating buffer
-    const workBuffer = ctx.device.createBuffer({
-        label: 'my output buffer',
-        size: input.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-    });
+    bufferManager.init(ctx.device);
 
-    ctx.device.queue.writeBuffer(workBuffer, 0, input);
+    const paramBuffer = bufferManager.createBuffer(paramDesc);
+
+    const posOff    = paramDesc.attributes[0].offset;
+    const scaleOff  = paramDesc.attributes[1].offset;
+    const rotOff    = paramDesc.attributes[2].offset;
+    const colorOff  = paramDesc.attributes[3].offset;
+    const alphaOff  = paramDesc.attributes[4].offset;
+
+    const input = new Float32Array(paramDesc.size);
+
+    input.set([0.5, 0.5], posOff);
+    input.set([0.7, 0.7], scaleOff);
+    input.set([0.0], rotOff);
+    input.set([8.0, 1.0, 1.0], colorOff);
+    input.set([1.0], alphaOff);
+
+    ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
     const resultBuffer = ctx.device.createBuffer({
         label: 'result buffer',
-        size: input.byteLength,
+        size: paramDesc.sizeBytes,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 
+
     // == uniform stuff for interaction ==
-
-    bufferManager.init(ctx.device);
-
 
     const uBuffer = bufferManager.createBuffer(uDesc);
 
     const uValues = new Float32Array(uDesc.size);
     const att = uDesc.attributes;
 
-    uValues.set(
-        [input[3], input[4]]
-    , att[1].offset); // variance Mat
+    let setResultInUnfirom = (input : Float32Array<ArrayBuffer>, index : number) => {
+        let startI = paramDesc.unitSize! * index;
+        let endI = startI + uValues.length;
+        uValues.set(input.subarray(startI, endI), 0);
+        ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
+    }
 
-    uValues.set(
-        [input[1], input[2]]
-    , att[0].offset); // mean vec
-
-    uValues.set(
-        [input[5]]
-    , att[2].offset);
-
-    uValues.set(
-        [input[6], input[7], input[8]]
-    , att[3].offset);
-
-
-    ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
+    setResultInUnfirom(input,0);
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
     const uniVal = new Float32Array([0.1]); // stepsize
@@ -271,7 +267,7 @@ async function main() {
         label: 'bindGroup workbuffer',
         layout: pipelineCompute.getBindGroupLayout(0),
         entries: [
-            { binding: 0, resource: workBuffer },
+            { binding: 0, resource: paramBuffer },
             { binding: 1, resource: sampler },
             { binding: 2, resource: texture },
             { binding: 3, resource: uniBuff },
@@ -304,6 +300,7 @@ async function main() {
         // read results
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
+        
         console.log("result", result);
         params_out.finalQ = result[1];        
         input.set(result, 0);
@@ -321,7 +318,7 @@ async function main() {
         const steps = 10;
         for(let i = 0; i < steps; i++) {
 
-            ctx.device.queue.writeBuffer(workBuffer, 0, input);
+            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
             const encoder = ctx.device.createCommandEncoder({
                 label: 'gd encoder',
@@ -335,7 +332,7 @@ async function main() {
             pass.end();
 
             // mapping result to my buffer
-            encoder.copyBufferToBuffer(workBuffer, 0, resultBuffer, 0, resultBuffer.size);
+            encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);
 
             // run the work lmao
             const commandBuffer = encoder.finish();
@@ -344,29 +341,11 @@ async function main() {
             // this updates the input values, not clean
             await updateResults(PARAMS_OUT);
 
-            uValues.set(
-                [input[3], input[4]]
-            , att[1].offset); // variance Mat
-
-            uValues.set(
-                [input[1], input[2]]
-            , att[0].offset); // mean vec
-            
-            uValues.set(
-                [input[5]]
-            , att[2].offset);
-
-            uValues.set(
-                [input[6], input[7], input[8]]
-            , att[3].offset);
-
-            console.log("yo rotation", input[5] * (180 / Math.PI));
-
-            ctx.device.queue.writeBuffer(uBuffer, 0, uValues);
+            setResultInUnfirom(input, 0);
 
             render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
 
-            ctx.device.queue.writeBuffer(workBuffer, 0, input);
+            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
             
         }
         

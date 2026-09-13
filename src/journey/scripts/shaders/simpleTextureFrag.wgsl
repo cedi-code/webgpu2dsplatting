@@ -5,17 +5,12 @@ struct vsOut {
     @location(0) texCoord: vec2f,
 };
 
-struct Uniform {
-    pos: vec2f,
-    scale: vec2f,
-    rot: f32,
-    color: vec3f,
-};
-
 struct Params {
     pos : vec2f,
     scale : vec2f,
-    rot : f32
+    rot : f32,
+    color : vec3f,
+    alpha: f32,
 };
 
 fn rotMat(r: f32) -> mat2x2f {
@@ -48,7 +43,7 @@ fn g(p : Params, x : vec2f) -> f32 {
 
 @group(0) @binding(0) var ourSampler: sampler;
 @group(0) @binding(1) var ourTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> uni : Uniform;
+@group(0) @binding(2) var<uniform> uni : Params;
 
 @fragment fn fs(
     in : vsOut
@@ -57,7 +52,7 @@ fn g(p : Params, x : vec2f) -> f32 {
 
     let pNorm = in.p.xy * vec2f(1.0/256.0);
 
-    let gauss = g(Params(uni.pos, uni.scale, uni.rot), pNorm);
+    let gauss = g(uni, pNorm);
     let color = vecSigmoid(uni.color) * gauss;
 
     //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
