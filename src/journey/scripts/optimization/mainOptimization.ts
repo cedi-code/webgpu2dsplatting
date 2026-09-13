@@ -7,12 +7,47 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
 import simpleTileVert from '../shaders/staticTileVert.wgsl?raw';
 import simpleTextureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
+import type { UniformBufferDescriptor } from '../../../mytypes';
 
 
 async function loadImageBitmap(url : string) {
     const res = await fetch(url);
     const blob = await res.blob();
     return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
+}
+
+type FlatParams = {
+    posX: number;
+    posY: number;
+    scaleX: number;
+    scaleY: number;
+    rot: number;
+    r: number;
+    g: number;
+    b: number;
+    alpha: number;
+};
+
+function parseParams(data : Float32Array, desc : UniformBufferDescriptor, round? : number) {
+    const posOff    = desc.attributes[0].offset;
+    const scaleOff  = desc.attributes[1].offset;
+    const rotOff    = desc.attributes[2].offset;
+    const colorOff  = desc.attributes[3].offset;
+    const alphaOff  = desc.attributes[4].offset;    
+    
+    // the + makes it go back to nuber
+    const r = (n: number) : number => +n.toFixed(round ?? 3);
+    return {
+            posX:   r(data[posOff]),
+            posY:   r(data[posOff + 1]),
+            scaleX: r(data[scaleOff]),
+            scaleY: r(data[scaleOff + 1]),
+            rot:    r(data[rotOff]),
+            r:      r(data[colorOff]),
+            g:      r(data[colorOff + 1]),
+            b:      r(data[colorOff + 2]),
+            alpha:  r(data[alphaOff]),
+        };
 }
 
 async function main() {
@@ -199,7 +234,8 @@ async function main() {
     const alphaOff  = paramDesc.attributes[4].offset;
 
     const input = new Float32Array(paramDesc.size);
-    let nextUnit = paramDesc.unitSize!;
+    const unitS = paramDesc.unitSize!;
+    let nextUnit = unitS;
 
     // gauss 1
     input.set([0.9, 0.3], posOff);
@@ -214,6 +250,16 @@ async function main() {
     input.set([0.0], nextUnit + rotOff);
     input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
     input.set([1.0], nextUnit + alphaOff);
+
+    const prtyPrint = (data : Float32Array) => {
+        const result : FlatParams[] = []
+        for(let i = 0; i < numParams; i++) {
+            const splatData = data.subarray(unitS*i, unitS*(i+1));
+            result.push(parseParams(splatData, paramDesc));
+        }
+        console.table(result);
+    }
+    prtyPrint(input);
 
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
@@ -290,10 +336,6 @@ async function main() {
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
         
-        const stride = paramDesc.unitSize!;
-
-        // todo prty print gaussian
-
         params_out.finalQ = result[1];        
         input.set(result, 0);
 
@@ -336,13 +378,11 @@ async function main() {
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
             render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
-
-            
         }
+        prtyPrint(input);
+
         
     }
-
-
     // == interactive suff, not really needed
     {
         // const PARAMS = {
