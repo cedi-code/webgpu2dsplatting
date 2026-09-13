@@ -54,15 +54,15 @@ fn g(p : Params, x : vec2f) -> f32 {
     
     var resultColor = vec4f(0.0);
 
-    for(var  i = 0; i < 1; i++) {
+    for(var  i = 0; i < 2; i++) {
         let gauss = g(output[i], pNorm);
         let color = vecSigmoid(output[i].color) * gauss;
 
         //return vec4f(in.texCoord.y, 1.0-gauss, in.texCoord.x, 1.0);
-        let red = select(0.0, gauss, gauss > 0.9);
+        let center = select(vec3f(0.0),vec3f(1.0)-color, gauss > 0.98);
 
         // this is sloppy but just for testing
-        resultColor += vec4f(color, 1.0) * textureSample(ourTexture, ourSampler, in.texCoord);
+        resultColor += vec4f(color+center, 1.0) + 0.1 * textureSample(ourTexture, ourSampler, in.texCoord);
     }
     return resultColor;
 

@@ -43,7 +43,7 @@ async function main() {
     });
     
     // number of splats
-    const numParams = 1;
+    const numParams = 2;
 
     const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numParams);
     paramBuilder.add('pos', "vec2f")
@@ -199,12 +199,21 @@ async function main() {
     const alphaOff  = paramDesc.attributes[4].offset;
 
     const input = new Float32Array(paramDesc.size);
+    let nextUnit = paramDesc.unitSize!;
 
-    input.set([0.5, 0.5], posOff);
-    input.set([0.7, 0.7], scaleOff);
+    // gauss 1
+    input.set([0.9, 0.3], posOff);
+    input.set([1.5, 1.5], scaleOff);
     input.set([0.0], rotOff);
     input.set([8.0, 1.0, 1.0], colorOff);
     input.set([1.0], alphaOff);
+
+    // gauss 2
+    input.set([0.3, 0.6], nextUnit + posOff);
+    input.set([0.7, 0.7], nextUnit + scaleOff);
+    input.set([0.0], nextUnit + rotOff);
+    input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
+    input.set([1.0], nextUnit + alphaOff);
 
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
@@ -224,7 +233,7 @@ async function main() {
 
     // == texture stuff
 
-    const testImageUrl = 'assets/testImage.jpg';
+    const testImageUrl = 'assets/testImage2splats.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -281,7 +290,10 @@ async function main() {
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
         
-        console.log("result", result);
+        const stride = paramDesc.unitSize!;
+
+        // todo prty print gaussian
+
         params_out.finalQ = result[1];        
         input.set(result, 0);
 

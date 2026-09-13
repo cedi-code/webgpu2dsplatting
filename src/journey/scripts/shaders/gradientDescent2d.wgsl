@@ -103,52 +103,51 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f) -> Grad {
 @compute @workgroup_size(1) fn computeGD() {
 
     let size = vec2u(128, 128); // static choosen size
-
-
-    let initalParams = output[0];
     let n = f32(size.y * size.x);
     let sizeSample = vec2f(size);
     
-    var currLoss = 0.0;
-    var paramsPartial = Params(vec2f(0.0), vec2f(0.0), 0.0, vec3f(0.0), 0.0);
+    for(var i = 0; i < 2; i++) {
 
-    currLoss = 0.0;
-    for (var y = 0u; y < size.y; y++) {
-        for (var x = 0u; x < size.x; x++) {
+        let initalParams = output[i];
+        var currLoss = 0.0;
+        var paramsPartial = Params(vec2f(0.0), vec2f(0.0), 0.0, vec3f(0.0), 0.0);
 
-            let uv = vec2f(vec2u(x, y)) / sizeSample;
-            let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
-            let colorPreMult = vec4f(color.rgb * color.a, color.a);
-            // loss
-            currLoss += Loss(initalParams, uv, color);
+        currLoss = 0.0;
+        for (var y = 0u; y < size.y; y++) {
+            for (var x = 0u; x < size.x; x++) {
 
-            // params
+                let uv = vec2f(vec2u(x, y)) / sizeSample;
+                let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
+                let colorPreMult = vec4f(color.rgb * color.a, color.a);
+                // loss
+                currLoss += Loss(initalParams, uv, color);
 
-            let grad = GradLoss_Q_S(initalParams, uv, colorPreMult); 
+                // params
+                let grad = GradLoss_Q_S(initalParams, uv, colorPreMult); 
 
-            paramsPartial.pos += grad.pos;
-            paramsPartial.scale += grad.scale;
-            paramsPartial.rot += grad.rot;
-            paramsPartial.color += grad.color;
-
+                paramsPartial.pos += grad.pos;
+                paramsPartial.scale += grad.scale;
+                paramsPartial.rot += grad.rot;
+                paramsPartial.color += grad.color;
+            }
         }
+        currLoss /= n;
+
+
+        let stepQ = paramsPartial.pos / n;
+        let stepS = paramsPartial.scale / n;
+        let stepR = paramsPartial.rot / n;
+        let stepC = paramsPartial.color / n;
+        let stepA = paramsPartial.alpha / n;
+
+        // this is just a vector, when optimizing, no need to convert it
+        let newQ = initalParams.pos - uniforms.stepSize * stepQ;
+        let newS = initalParams.scale - uniforms.stepSize * stepS;
+        let newR = initalParams.rot - uniforms.stepSize * stepR;
+        let newC = initalParams.color - uniforms.stepSize * stepC;
+        let newA = initalParams.alpha - uniforms.stepSize * stepA;
+
+        output[i] = Params(newQ, newS, newR, newC, newA);
     }
-    currLoss /= n;
-
-
-    let stepQ = paramsPartial.pos / n;
-    let stepS = paramsPartial.scale / n;
-    let stepR = paramsPartial.rot / n;
-    let stepC = paramsPartial.color / n;
-    let stepA = paramsPartial.alpha / n;
-
-    // this is just a vector, when optimizing, no need to convert it
-    let newQ = initalParams.pos - uniforms.stepSize * stepQ;
-    let newS = initalParams.scale - uniforms.stepSize * stepS;
-    let newR = initalParams.rot - uniforms.stepSize * stepR;
-    let newC = initalParams.color - uniforms.stepSize * stepC;
-    let newA = initalParams.alpha - uniforms.stepSize * stepA;
-
-    output[0] = Params(newQ, newS, newR, newC, newA);
     
 }
