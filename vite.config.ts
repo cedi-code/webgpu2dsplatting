@@ -10,6 +10,8 @@ export default defineConfig({
         journey: resolve(__dirname, 'journey.html'),
         primitive: resolve(__dirname, 'journey-primitive.html'),
         optimization: resolve(__dirname, 'journey-optimization.html'),
+        test: resolve(__dirname, 'test.html'),
+
       },
     },
   },
