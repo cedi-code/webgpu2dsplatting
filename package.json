@@ -23,6 +23,7 @@
     "marked-katex-extension": "^5.1.12",
     "marked-shiki": "^1.2.1",
     "shiki": "^4.4.3",
-    "tweakpane": "^4.0.5"
+    "tweakpane": "^4.0.5",
+    "wgpu-matrix": "^3.4.2"
   }
 }

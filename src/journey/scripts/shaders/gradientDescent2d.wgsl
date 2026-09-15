@@ -23,6 +23,13 @@ struct Grad {
     alpha: f32,
 };
 
+struct GradGauss {
+    pos : vec2f,
+    scale : vec2f,
+    rot : f32
+}
+
+
 fn rotMat(r: f32) -> mat2x2f {
     return mat2x2f(
         cos(r), sin(r), // column 0
@@ -55,6 +62,31 @@ fn g(p : Params, x : vec2f) -> f32 {
     return exp(-0.5 * D2);
 }
 
+fn EvalGradGauss(p : Params, x: vec2f) -> GradGauss {
+
+    let gauss = g(p,x);
+    let dist = (x - p.pos);
+
+    //  v = R^T*(x-q)
+    let R = rotMat(p.rot);
+    let v = transpose(R)*dist;
+
+    // \Sigma = R * S^2 * R^T
+    let sigma = R * exp(p.scale) * transpose(R);
+
+    // -0.5 g * \Sigma  * -2 * (x-q)
+    let gradQ = gauss * sigma * dist;
+
+    // -0.5 g * 2 * v^t * s * v 
+    let gradS = -1.0 * gauss * v * v * exp(p.scale);
+    
+    //d/d\theta (x-u)^T * RSS^TR^T * (x-u) <=>  v^T * (L*S2 - S2*L) * v => dR/d\theta = L*R  => 
+    //  -0.5 g * 2*v_x*v_y*(s_x^2 - s_y^2)
+    let gradR = -1.0 * gauss * v.x * v.y * (exp(p.scale.x) - exp(p.scale.y));
+
+    return GradGauss(gradQ, gradS, gradR);
+}
+
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
         (gColor.r - imgC.r) + 
@@ -63,31 +95,16 @@ fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     ) / 3.0;;
 }
 
+
+
 fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f32, oneMinusAlpha : f32) -> Grad {
 
     let gauss = g(p,x);
     // let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
     let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
-    let dist = (x - p.pos);
 
-    //  v = R^T*(x-q)
-    let R = rotMat(p.rot);
-    let v = transpose(R)*dist;
-
-    let dLossGauss2 = -2.0 * diff * gauss;
-
-    // \Sigma = R * S^2 * R^T
-    let sigma = R * exp(p.scale) * transpose(R);
-
-    // 2 * (g(x) - I) * -0.5 * g(x) * \Sigma * * -2 * (x-q)
-    let gradQ = -1.0 * dLossGauss2 * sigma * dist;
-
-    // 2 * (g(x) - I) * -0.5 * g(x) * 2 * v^t * s * v 
-    let gradS = 10.0 * dLossGauss2 * v * v * exp(p.scale);
-    
-    //d/d\theta (x-u)^T * RSS^TR^T * (x-u) <=>  v^T * (L*S2 - S2*L) * v => dR/d\theta = L*R  => 
-    // 2 * (g(x) - I) * -0.5 * g(x) * 2*v_x*v_y*(s_x^2 - s_y^2)
-    let gradR = 40.0 * dLossGauss2 * v.x * v.y * (exp(p.scale.x) - exp(p.scale.y));
+    let gradGauss = EvalGradGauss(p, x);    
+    let dLossGauss2 = 2.0 * diff;
 
     let gradC = vec3f(
         50.0 * (gColor.r - imgC.r) * dSigmoid(p.color.r) * sigmoid(p.alpha) * gauss,
@@ -96,10 +113,15 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f
     );
 
     // alpha gradient
-    // 
+    
     let gradA = 50.0 * 2.0 * diff * (gauss - background) * oneMinusAlpha * dSigmoid(p.alpha);    
 
-    return Grad(gradQ, gradS, gradR, gradC, gradA);
+    let gradLossQ = dLossGauss2 * gradGauss.pos;
+    let gradLossS = 5.0 * dLossGauss2 * gradGauss.scale;
+    let gradLossR = 20.0 * dLossGauss2 * gradGauss.rot;
+
+
+    return Grad(gradLossQ, gradLossS, gradLossR, gradC, gradA);
 }
 
 
