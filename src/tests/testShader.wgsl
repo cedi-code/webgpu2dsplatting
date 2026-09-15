@@ -11,6 +11,7 @@ struct GradResult {
 
 struct Uniform {
     numSamples: f32,
+    numProperties : f32,
     stepH : f32,
     epsilon: f32,
 };
@@ -21,26 +22,31 @@ struct Uniform {
 @group(0) @binding(3) var<storage, read_write> output: array<GradResult>;
 
 
-fn numericalDiffGauss(gauss : GaussParams, x : vec2f) -> vec2f {
-
-    var p = GaussParams(gauss.pos, gauss.scale, gauss.rot);
-
-    let g0 = g(p,x);
-
-    p.pos = p.pos + vec2f(u.stepH, 0.0);
-    let g1x = g(p,x);
-
-    p.pos += vec2f(-u.stepH, u.stepH);
-    let g1y = g(p,x);
-
-
-    return vec2f(
-        (g1x - g0) / (u.stepH),
-        (g1y - g0) / (u.stepH)
-    );
+fn numericalDiff(f1 : vec2f, f0 : f32) -> vec2f {
+    return (f1 - vec2f(f0)) / u.stepH;
 }
 
-fn upperBoundM1(p : GaussParams, x : vec2f) -> vec2f {
+fn calcTruncationError(m1 : vec2f, m2 : vec2f) -> vec2f {
+
+    // h / 2 M1 + 2eps / h * M2
+    return ((u.stepH / 2.0) * m1) + ((2.0 * u.epsilon / u.stepH) * m2);
+}
+
+
+fn calcScaleM1(p : GaussParams, x : vec2f) -> vec2f {
+
+    // this is a rough approx
+    const c = 10.0;
+    let s2 = exp(4.0 * p.scale);
+    let dist = (x - p.pos);
+    let dist4 = dist * dist * dist * dist;
+
+    // sloppy approx, could be better
+    return abs(c * s2 * g(p,x) * dist4);
+}
+
+
+fn calcPosM1(p : GaussParams, x : vec2f) -> vec2f {
 
     // this is a rough approx
     const c = 10.0;
@@ -51,38 +57,60 @@ fn upperBoundM1(p : GaussParams, x : vec2f) -> vec2f {
     return abs(c * s4 * g(p,x) * dist2);
 }
 
-fn upperBoundM2(gauss : GaussParams, x : vec2f) -> vec2f {
+fn calcRotM1(p : GaussParams, x : vec2f) -> f32 {
 
-    var p = GaussParams(gauss.pos, gauss.scale, gauss.rot);
+    // this is a pure vibes approx, not good
+    const c = 10.0;
+    let dist = (x - p.pos);
+    let distSomething = dist.x * dist.x * dist.y * dist.y;
 
+    let scaleDiff = (exp(2.0 * p.scale.x) - exp(2.0 * p.scale.y)) * (exp(2.0 * p.scale.x) - exp(2.0 * p.scale.y)) ;
+
+    return abs(c * g(p,x) * distSomething * scaleDiff);
+}
+
+fn calcM2(g0 : f32, g1x : f32, g1y : f32) -> vec2f {
     // could also be false, but not by much
-    var gMax = g(p,x);
-    p.pos += vec2f(u.stepH, 0.0);
-    gMax = max(g(p,x), gMax);
-
-    p.pos += vec2f(-u.stepH, u.stepH);
-    return vec2f(max(g(p,x), gMax));
+    var gMax = max(g1x, g1y);
+    return vec2f(max(g0, gMax));
 }
 
-fn calcTruncationError(p : GaussParams, x : vec2f) -> vec2f {
-
-    let m1 = upperBoundM1(p, x);
-    let m2 = upperBoundM2(p, x);
-
-    // h / 2 M1 + 2eps / h * M2
-    return ((u.stepH / 2.0) * m1) + ((2.0 * u.epsilon / u.stepH) * m2);
-}
 
 @compute @workgroup_size(1) fn computeGD() {
 
-    for (var y = 0u; y < u32(u.numSamples); y++) {
+    for (var y = 0u; y < u32(u.numSamples * u.numProperties); y+=3u) {
 
-        let gauss = inputGauss[0];
-        let x = inputSamples[y].sample;
-        output[y].expected = numericalDiffGauss(gauss, x);        
-        output[y].result = EvalGradGauss(gauss, x).pos;
-        output[y].truncationError = calcTruncationError(gauss, x);        
+        let p = inputGauss[0];
+        let x = inputSamples[y % u32(u.numProperties)].sample;
 
+        let g0 = g(p,x);
+        let hx = vec2f(u.stepH, 0.0);
+        let hy = vec2f(0.0, u.stepH);
+
+        let g1xPos      = g(GaussParams(p.pos + hx, p.scale, p.rot), x);
+        let g1yPos      = g(GaussParams(p.pos + hy, p.scale, p.rot), x);
+        let g1Pos = vec2f(g1xPos, g1yPos);
+
+        let g1xScale    = g(GaussParams(p.pos, p.scale + hx, p.rot), x);
+        let g1yScale    = g(GaussParams(p.pos, p.scale + hy, p.rot), x);
+        let g1Scale = vec2f(g1xScale, g1yScale);
+
+        let g1xRot       = g(GaussParams(p.pos, p.scale, p.rot + u.stepH), x);
+        let g1Rot = vec2f(g1xRot, 0.0);
+
+        output[y].expected = numericalDiff(g1Pos, g0);        
+        output[y].result = EvalGradGauss(p, x).pos;
+        output[y].truncationError = calcTruncationError(calcPosM1(p,x), calcM2(g0, g1xPos, g1yPos)); 
+
+        output[y+1].expected = numericalDiff(g1Scale, g0);        
+        output[y+1].result = EvalGradGauss(p, x).scale;
+        output[y+1].truncationError = calcTruncationError(calcScaleM1(p,x), calcM2(g0, g1xScale, g1yScale));
+        
+        // hack, just ignore the y axis (waste data but i dont care)
+        output[y+2].expected = numericalDiff(g1Rot, g0);        
+        output[y+2].result = vec2f(EvalGradGauss(p, x).rot);
+        output[y+2].truncationError = calcTruncationError(vec2f(calcRotM1(p,x),0.0), calcM2(g0, g1xRot, 0.0)); 
     }
+
 
 }

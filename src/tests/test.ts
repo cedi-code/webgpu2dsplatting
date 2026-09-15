@@ -40,7 +40,7 @@ async function main() {
     bufferManager.init(ctx.device);
 
     const numSplats = 1;
-    const numXSamples = 3;
+    const numXSamples = 10;
 
     const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_dst', numSplats);
     paramBuilder.add('pos', "vec2f")
@@ -55,15 +55,17 @@ async function main() {
     sampleBuilder.add('sample', "vec2f")
     
     const sampleDesc = sampleBuilder.build();
-
+    
     const unifromBuilder = new UniformBufferDescriptorBuilder('test unfirom', 'uniform');
     unifromBuilder.add('numSamples', "f32")
-                  .add('stepH', "f32")
-                  .add('Epsilon', "f32");
-
+                  .add('numProperties', "f32")
+                    .add('stepH', "f32")
+                    .add('Epsilon', "f32");
+    
     const uniformDesc = unifromBuilder.build();
-
-    const numTestSamples = numSplats * numXSamples;
+    
+    const numPropertiesTested = 3.0;
+    const numTestSamples = numSplats * numXSamples * numPropertiesTested;
     const storageBufferBuilderGrad = new UniformBufferDescriptorBuilder("test result buffer", "storage", "copy_src", numTestSamples);
     const gradResultDesc = storageBufferBuilderGrad
                             .add('expected', "vec2f")
@@ -111,7 +113,7 @@ async function main() {
 
         let splatOff = paramDesc.unitSize * i;
         params.set([0.5, 0.5],      splatOff + posOff);
-        params.set([1.5, 1.5],      splatOff + scaleOff);
+        params.set([1.5, 1.0],      splatOff + scaleOff);
         params.set([0.0],           splatOff + rotOff);
         params.set([8.0, 8.0, 8.0], splatOff + colorOff);
         params.set([8.0],           splatOff + alphaOff);
@@ -139,42 +141,55 @@ async function main() {
     console.log("EPSILON", MACHINE_EPSILON);
 
     uniformsValues.set([numXSamples],   uniformDesc.attributes[0].offset);
-    uniformsValues.set([h],             uniformDesc.attributes[1].offset);
-    uniformsValues.set([MACHINE_EPSILON], uniformDesc.attributes[2].offset);
+    uniformsValues.set([numPropertiesTested],   uniformDesc.attributes[1].offset);
+    uniformsValues.set([h],             uniformDesc.attributes[2].offset);
+    uniformsValues.set([MACHINE_EPSILON], uniformDesc.attributes[3].offset);
 
     console.log("uniform values:", uniformsValues)
 
     ctx.device.queue.writeBuffer(uniformBuffer, 0, uniformsValues);
     
     // figure out how to read back test result
-    const testState = {
-            TestGradPos : false,
-            TestGradScale : false,
-            TestGradRot : false
-        };
 
     const PARAMS = {
         stepH : 4,
-        errorDq : 0.0,
+        errorDq : '..',
         TestResultGradQ : 'waiting...',
+        TestResultGradS : 'waiting...',
+        TestResultGradR : 'waiting...',
     };
 
     let evalResult = (result : GradResult[]) => {
-        let testFail = false;
+        let testFail = [false, false, false];
         result.forEach( (res : GradResult, i : number) => {
             let errorVec2 = vec2.create();
 
-            console.log("trunaction error", res.truncationError);
-            console.log("error", vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2));
-            PARAMS.errorDq = vec2.len(vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2));
+            const propertyI = i % numPropertiesTested;
 
-            if(Math.abs(errorVec2[0]) > res.truncationError[0] || 
-               Math.abs(errorVec2[1]) > res.truncationError[1]) {
-                testFail = true;
+
+            
+            const rotProperty = (i % numPropertiesTested) == 2;
+
+            vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2);
+            const errorGradX = Math.abs(res.numericalGrad[0] - res.derrivedGrad[0])  > res.truncationError[0];
+            const errorGradY = Math.abs(res.numericalGrad[1] - res.derrivedGrad[1])  > res.truncationError[1];
+            PARAMS.errorDq = (Math.abs(res.numericalGrad[0] - res.derrivedGrad[0])).toFixed(8);
+
+            if(errorGradX || (errorGradY && !rotProperty)) {
+                console.error("trunaction error", res.truncationError);
+                console.error("numerical error", vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2));
+                console.log("sampleX", samples[Math.floor(i / numPropertiesTested)]);
+    
+                console.error("property that failed", propertyI);
+                console.error("dim that failed x,y", errorGradX, errorGradY);
+                testFail[propertyI] = true;
             }
         })
         
-        PARAMS.TestResultGradQ = testFail ? 'failed' : 'pass';
+        PARAMS.TestResultGradQ = testFail[0] ? 'failed' : 'pass';
+        PARAMS.TestResultGradS = testFail[1] ? 'failed' : 'pass';
+        PARAMS.TestResultGradR = testFail[2] ? 'failed' : 'pass';
+
     }
 
     let runTest = async () => {
@@ -240,17 +255,26 @@ async function main() {
         title: 'Run Tests',
         label: 'Run',
     }).on('click', () => {
-        PARAMS.errorDq = 0.000000;
+        PARAMS.errorDq = '0.000000';
         runTest();
     });
 
     paneTests.addBinding(PARAMS, 'errorDq', {
-        label: 'error rate diff q',
+        label: 'numerical vs analytical diff: ',
         readonly: true,
         bufferSize: numTestSamples
     });
     paneTests.addBinding(PARAMS, 'TestResultGradQ', {
         readonly: true,
+        label: 'grad pos'
+    });
+    paneTests.addBinding(PARAMS, 'TestResultGradS', {
+        readonly: true,
+        label: 'grad scale'
+    });
+    paneTests.addBinding(PARAMS, 'TestResultGradR', {
+        readonly: true,
+        label: 'grad rot'
     });
 }
 
