@@ -1,5 +1,7 @@
 import { Pane } from 'tweakpane';
 
+import uPlot from 'uplot';
+
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
@@ -18,6 +20,87 @@ async function loadImageBitmap(url : string) {
     const blob = await res.blob();
     return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
 }
+
+function maxLabelWidth(self : uPlot, axis : uPlot.Axis, values: string[]) {
+    let ctx = self.ctx;
+    let width = 0;
+
+    if(!axis.font) {
+        return width;
+    }
+    // Preserve the canvas state so the font cache stays valid.
+    ctx.save();
+    ctx.font = axis.font[0];
+
+    for (let value of values ?? []) {
+        if (value != null)
+            width = Math.max(width, ctx.measureText(String(value)).width);
+    }
+
+    ctx.restore();
+
+    return width / uPlot.pxRatio;
+}
+
+const opts : uPlot.Options = {
+    title: "Loss graph",
+    width: 512,
+    height: 256,
+    scales: {
+        x: {
+            time: false,
+        //	auto: false,
+        //	range: [0, 6],
+        },
+    },
+    series: [
+        {
+            label: "step",
+        },
+        {
+            label: "loss",
+            stroke: "red",
+        }
+    ],
+    axes: [
+        {
+            label: "Steps",
+            labelSize: 20,
+            // scale: '%',
+            values(self, splits) {
+                return splits.map(s => +s.toFixed(2));
+            }
+        },
+        {
+            label: "L2",
+            labelGap: 8,
+            labelSize: 8 + 12 + 8,
+            // scale: '%',
+            stroke: "red",
+            size(self, values, axisIdx) {
+                let axis = self.axes[axisIdx];
+                if(!axis.ticks?.size || !axis.gap) {
+                    return 0.0;
+                }
+                let axisSize = axis.ticks.size + axis.gap;
+
+                axisSize += maxLabelWidth(self, axis, values);
+
+                return Math.ceil(axisSize);
+            },
+        }
+    ],
+};
+
+let lossData : number[]  = []
+let lossSteps: number[] = []
+
+let lossDataPlot : uPlot.AlignedData = [];
+
+let plotHTMLElem = document.getElementById('loss-plot') ?? document.body;
+let u = new uPlot(opts, lossDataPlot, plotHTMLElem);
+
+//     u.setData(getData(points, mult *= 10));
 
 async function main() {
 
@@ -56,6 +139,10 @@ async function main() {
                 .add('color', "vec3f")
                 .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
+
+    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst');
+    lossBuilder.add('loss', "f32");
+    const lossBuffDesc = lossBuilder.build();
 
     console.log(paramDesc);
     
@@ -127,6 +214,14 @@ async function main() {
             buffer: {
                 type: 'uniform',
                 minBindingSize: uniDesc.sizeBytes,
+            },
+            },
+            { // lossOutput
+            binding: 4,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: lossBuffDesc.sizeBytes,
             },
             },
         ],
@@ -232,12 +327,23 @@ async function main() {
 
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
+    // loss result buffer
+    const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
+    const lossV = new Float32Array(lossBuffDesc.size);
+    ctx.device.queue.writeBuffer(lossBuffer, 0, lossV);
+
+
     const resultBuffer = ctx.device.createBuffer({
         label: 'result buffer',
         size: paramDesc.sizeBytes,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 
+    const lossResultBuffer = ctx.device.createBuffer({
+        label: 'loss result buffer',
+        size: lossBuffDesc.sizeBytes,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    });
 
     // == uniform stuff for interaction ==
 
@@ -275,6 +381,8 @@ async function main() {
             { binding: 1, resource: sampler },
             { binding: 2, resource: texture },
             { binding: 3, resource: uniBuff },
+            { binding: 4, resource: lossBuffer },
+
         ]
     });
 
@@ -314,6 +422,25 @@ async function main() {
         return result;
     }
 
+    let updateLossResults = async () => {
+
+        // read loss output
+        await lossResultBuffer.mapAsync(GPUMapMode.READ);
+        const result = new Float32Array(lossResultBuffer.getMappedRange());
+        lossData.push(result[0].valueOf());
+        const lastStep = lossSteps.at(-1) ?? 0;
+        lossSteps.push(lastStep + 1);
+        
+        const aaa : uPlot.AlignedData = [
+            new Float32Array(lossSteps),
+            new Float32Array(lossData),
+        ];
+        u.setData(aaa);
+
+        // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
+        lossResultBuffer.unmap();  
+    }
+
     render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
 
     let runGD = async () => {
@@ -336,6 +463,8 @@ async function main() {
 
             // mapping result to my buffer
             encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);
+            encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+
 
             // run the work lmao
             const commandBuffer = encoder.finish();
@@ -343,6 +472,9 @@ async function main() {
 
             // this updates the input values, not clean
             await updateResults(PARAMS_OUT);
+
+            // updates loss plot
+            await updateLossResults();
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 

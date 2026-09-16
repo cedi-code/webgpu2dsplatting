@@ -12,6 +12,7 @@ struct Params {
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> uniforms : Uniform;
+@group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
 
 struct Grad {  
     gauss: GradGauss,
@@ -21,9 +22,9 @@ struct Grad {
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
-        (gColor.r - imgC.r) + 
-        (gColor.g - imgC.g) + 
-        (gColor.b - imgC.b)
+        (gColor.r - imgC.r) * (gColor.r - imgC.r) + 
+        (gColor.g - imgC.g) * (gColor.g - imgC.g) + 
+        (gColor.b - imgC.b) * (gColor.b - imgC.b)
     ) / 3.0;;
 }
 
@@ -113,6 +114,7 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f
                 }
         }
         currLoss /= n;
+        lossOutput[0] = currLoss;
 
         for(var i = 0; i < nGauss; i++) {
             let initalParams = output[i];

@@ -24,6 +24,7 @@
     "marked-shiki": "^1.2.1",
     "shiki": "^4.4.3",
     "tweakpane": "^4.0.5",
+    "uplot": "^1.6.32",
     "wgpu-matrix": "^3.4.2"
   }
 }
