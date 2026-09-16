@@ -173,15 +173,23 @@ async function main() {
             vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2);
             const errorGradX = Math.abs(res.numericalGrad[0] - res.derrivedGrad[0])  > res.truncationError[0];
             const errorGradY = Math.abs(res.numericalGrad[1] - res.derrivedGrad[1])  > res.truncationError[1];
-            PARAMS.errorDq = (Math.abs(res.numericalGrad[0] - res.derrivedGrad[0])).toFixed(8);
+            if(i < 1) {
+                const prtyJson = {
+                    num :  res.numericalGrad[0].toFixed(6),
+                    grad: res.derrivedGrad[0].toFixed(6),
+                    trunc: res.truncationError[0].toFixed(6)
+                }
+                PARAMS.errorDq = JSON.stringify(prtyJson, null, 2)
+            }
+
 
             if(errorGradX || (errorGradY && !rotProperty)) {
-                console.error("trunaction error", res.truncationError);
-                console.error("numerical error", vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2));
+                console.log("trunaction error", res.truncationError);
+                console.log("numerical error", vec2.sub(res.numericalGrad, res.derrivedGrad, errorVec2));
                 console.log("sampleX", samples[Math.floor(i / numPropertiesTested)]);
     
-                console.error("property that failed", propertyI);
-                console.error("dim that failed x,y", errorGradX, errorGradY);
+                console.log("property that failed", propertyI);
+                console.log("dim that failed x,y", errorGradX, errorGradY);
                 testFail[propertyI] = true;
             }
         })
@@ -260,9 +268,9 @@ async function main() {
     });
 
     paneTests.addBinding(PARAMS, 'errorDq', {
-        label: 'numerical vs analytical diff: ',
+        label: 'numerical vs analytical vs truncation error: ',
         readonly: true,
-        bufferSize: numTestSamples
+        bufferSize: 3
     });
     paneTests.addBinding(PARAMS, 'TestResultGradQ', {
         readonly: true,
