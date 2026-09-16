@@ -28,9 +28,9 @@ export function parseParams(data : Float32Array, desc : UniformBufferDescriptor,
             scaleX: r(Math.exp(data[scaleOff])),
             scaleY: r(Math.exp(data[scaleOff + 1])),
             rot:    r(data[rotOff]),
-            r:      r(sigmoid(data[colorOff])),
-            g:      r(sigmoid(data[colorOff + 1])),
-            b:      r(sigmoid(data[colorOff + 2])),
-            alpha:  r(sigmoid(data[alphaOff])),
+            r:      r(sigmoid(data[colorOff], 4.0)),
+            g:      r(sigmoid(data[colorOff + 1], 4.0)),
+            b:      r(sigmoid(data[colorOff + 2], 4.0)),
+            alpha:  r(sigmoid(data[alphaOff], 4.0)),
         };
 }

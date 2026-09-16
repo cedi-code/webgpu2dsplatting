@@ -4,7 +4,10 @@ import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBu
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
+import { parseParams, type FlatParams } from '../../../myutils/LogHelpers';
+
 import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
+import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import simpleTileVert from '../shaders/staticTileVert.wgsl?raw';
 import simpleTextureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
 import type { UniformBufferDescriptor } from '../../../mytypes';
@@ -14,44 +17,6 @@ async function loadImageBitmap(url : string) {
     const res = await fetch(url);
     const blob = await res.blob();
     return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
-}
-
-function sigmoid(x : number) : number {
-    return 1.0 / (1.0 + Math.exp(-x + 4.0));
-}
-
-type FlatParams = {
-    posX: number;
-    posY: number;
-    scaleX: number;
-    scaleY: number;
-    rot: number;
-    r: number;
-    g: number;
-    b: number;
-    alpha: number;
-};
-
-function parseParams(data : Float32Array, desc : UniformBufferDescriptor, round? : number) {
-    const posOff    = desc.attributes[0].offset;
-    const scaleOff  = desc.attributes[1].offset;
-    const rotOff    = desc.attributes[2].offset;
-    const colorOff  = desc.attributes[3].offset;
-    const alphaOff  = desc.attributes[4].offset;    
-    
-    // the + makes it go back to nuber
-    const r = (n: number) : number => +n.toFixed(round ?? 3);
-    return {
-            posX:   r(data[posOff]),
-            posY:   r(data[posOff + 1]),
-            scaleX: r(Math.exp(data[scaleOff])),
-            scaleY: r(Math.exp(data[scaleOff + 1])),
-            rot:    r(data[rotOff]),
-            r:      r(sigmoid(data[colorOff])),
-            g:      r(sigmoid(data[colorOff + 1])),
-            b:      r(sigmoid(data[colorOff + 2])),
-            alpha:  r(sigmoid(data[alphaOff])),
-        };
 }
 
 async function main() {
@@ -66,7 +31,7 @@ async function main() {
 
     const csModule = ctx.device.createShaderModule({
         label: '1d gs module',
-        code: shaderCodeCompute 
+        code: (shaderGaussFunctions + shaderCodeCompute) 
     });
 
     
@@ -78,7 +43,7 @@ async function main() {
 
     const fsModule = ctx.device.createShaderModule({
         label: 'simple texture frag impl',
-        code: simpleTextureFrag 
+        code: (shaderGaussFunctions + simpleTextureFrag) 
     });
     
     // number of splats
