@@ -30,7 +30,16 @@ export type VertexAttribute = {
 };
 
 
-export type UniformType = "f32" | "i32" | "u32" | "vec2f" | "vec3f" | "vec4f" | "mat4x4f" | "mat3x3f" | "mat2x2f" | "vec2i" | "vec3i" | "vec4i" | "vec2u" | "vec3u" | "vec4u";
+export type UniformBaseType = "f32" | "i32" | "u32" | "vec2f" | "vec3f" | "vec4f" | "mat4x4f" | "mat3x3f" | "mat2x2f" | "vec2i" | "vec3i" | "vec4i" | "vec2u" | "vec3u" | "vec4u";
+
+
+export type UniformType = UniformBaseType | ArrayType;
+
+export type ArrayType = 
+{
+    type: UniformBaseType,
+    size: number,
+}
 
 export interface UniformMember {
     name: string;
@@ -39,3 +48,4 @@ export interface UniformMember {
     offsetBytes: number; 
     offset : number;
 }
+

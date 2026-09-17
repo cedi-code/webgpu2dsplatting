@@ -1,7 +1,9 @@
 import { 
     type UniformMember,
     type UniformBufferDescriptor,
+    type UniformBaseType,
     type UniformType,
+    type ArrayType,
     type VertexBufferDescriptor,
     type VertexAttribute,
     type BufferDescriptor 
@@ -16,7 +18,7 @@ interface BufferManager {
     createBuffer(descriptor : BufferDescriptor): GPUBuffer;
 }
 
-function getByteSize(format: GPUVertexFormat | UniformType): number {
+function getByteBaseSize(format: GPUVertexFormat | UniformBaseType): number {
     switch(format) {
         case "uint16":
             return 2;
@@ -58,9 +60,20 @@ function getByteSize(format: GPUVertexFormat | UniformType): number {
     }
 }
 
+function getByteSize(format: GPUVertexFormat | UniformType) {
+    if(typeof format === "object") {
+        const arrType = format as ArrayType;
+        const baseSize = getByteBaseSize(arrType.type);
+        const baseAlign = alignFromBaseType(arrType.type);
+        const elementStride = Math.ceil(baseSize / baseAlign) * baseAlign;
+
+        return elementStride * arrType.size;
+    }
+    return getByteBaseSize(format as GPUVertexFormat | UniformBaseType);
+}
 // ARRAY IS NOT SUPPORTED YET
 //  UniformType = "f32" | "i32" | "u32" | "vec2f" | "vec3f" | "vec4f" | "mat4x4f" | "mat3x3f" | "mat2x2f" | "vec2i" | "vec3i" | "vec4i" | "vec2u" | "vec3u" | "vec4u";
-function alignFromType(type: UniformType): number {
+function alignFromBaseType(type: UniformBaseType): number {
     switch(type) {
         case "f32":
         case "i32":
@@ -85,6 +98,13 @@ function alignFromType(type: UniformType): number {
     }
 }
 
+function alignFromType(type: UniformType): number {
+    if(typeof type === "object") { // array
+        const arrType = type as ArrayType;
+        return alignFromBaseType(arrType.type);
+    }
+    return alignFromBaseType(type as UniformBaseType);
+}
 
 class VertexBufferDescriptorBuilder {
 
@@ -160,15 +180,13 @@ class VertexBufferDescriptorBuilder {
     }
 }
 
-
+// ARRAYS ARE NOT SUPPORTED YET
 class UniformBufferDescriptorBuilder {
 
     result : Partial<UniformBufferDescriptor> = {};
 
     // would be cleaner if this is a static "create" method and have constructor take the descriptor object
-
-
-    constructor(label: string, usage?: "uniform" | "storage", usageCopy?: "copy_src_dst" | "copy_src" | "copy_dst", count?: number) {
+    constructor(label: string, usage?: "uniform" | "storage", usageCopy?: "copy_src_dst" | "copy_src" | "copy_dst") {
         this.result.label = label;
         this.result.usage = usage == "storage" ? GPUBufferUsage.STORAGE : GPUBufferUsage.UNIFORM;
         switch(usageCopy) 
@@ -184,7 +202,6 @@ class UniformBufferDescriptorBuilder {
                 this.result.usage |= GPUBufferUsage.COPY_DST;
                 break;
         }
-        this.result.count = count;
     }
 
     add(name: string, type: UniformType): UniformBufferDescriptorBuilder {
@@ -228,37 +245,13 @@ class UniformBufferDescriptorBuilder {
         // padding in the end
         currOffset = Math.ceil(currOffset / maxAlign) * maxAlign;
 
-        // non Array case
-        if(this.result.count === undefined) {
-            return {
-                label: this.result.label,
-                attributes: this.result.attributes,
-                usage: this.result.usage,
-                sizeBytes: currOffset,
-                size: currOffset / 4,
-            };
-        }
-        // array case
-        else if(this.result.usage & GPUBufferUsage.STORAGE)
-        {
-            let count = this.result.count;
-            return {
-                label: this.result.label,
-                attributes: this.result.attributes,
-                usage: this.result.usage,
-                sizeBytes: currOffset * count,
-                size: currOffset * count / 4,
-                unitSize: currOffset / 4,
-                unitSizeBytes: currOffset,
-                count: count
-            };
-
-        }
-        else {
-            throw Error("used count for uniform buffer, not supported!")
-        }
-
-
+        return {
+            label: this.result.label,
+            attributes: this.result.attributes,
+            usage: this.result.usage,
+            sizeBytes: currOffset,
+            size: currOffset / 4,
+        };
     }
 }
 
