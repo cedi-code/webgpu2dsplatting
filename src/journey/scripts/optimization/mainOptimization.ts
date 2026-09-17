@@ -11,7 +11,6 @@ import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import simpleTileVert from '../shaders/staticTileVert.wgsl?raw';
 import simpleTextureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
-import type { UniformBufferDescriptor } from '../../../mytypes';
 
 
 async function loadImageBitmap(url : string) {
@@ -356,7 +355,7 @@ async function main() {
         const lastStep = lossSteps.at(-1) ?? 0;
         lossSteps.push(lastStep + 1);
         
-        
+
         lossPlot.setData([lossSteps, lossData]);
 
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0

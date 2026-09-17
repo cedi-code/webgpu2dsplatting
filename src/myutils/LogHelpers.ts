@@ -94,17 +94,6 @@ export function createLossPlot(plotHTMLBody : HTMLElement) : uPlot {
                 labelGap: 8,
                 // scale: '%',
                 stroke: "red",
-                size(self, values, axisIdx) {
-                    let axis = self.axes[axisIdx];
-                    if(!axis.ticks?.size || !axis.gap) {
-                        return 0.0;
-                    }
-                    let axisSize = axis.ticks.size + axis.gap;
-
-                    axisSize += maxLabelWidth(self, axis, values);
-
-                    return Math.ceil(axisSize);
-                },
             }
         ],
     };
