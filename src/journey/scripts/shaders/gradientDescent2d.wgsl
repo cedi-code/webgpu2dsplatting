@@ -136,30 +136,17 @@ fn GradLoss(
             gradients[i].color  /= n;
             gradients[i].alpha  /= n;
 
-            // could be fixed once ADAM optimizer is adapted for gaussian struct
-            let offA = i * 9;
-            gr[offA + 0] = gradients[i].pos.x;
-            gr[offA + 1] = gradients[i].pos.y;
-            gr[offA + 2] = gradients[i].scale.x;
-            gr[offA + 3] = gradients[i].scale.y;
-            gr[offA + 4] = gradients[i].rot;
-            gr[offA + 5] = gradients[i].color.r;
-            gr[offA + 6] = gradients[i].color.g;
-            gr[offA + 7] = gradients[i].color.b;
-            gr[offA + 8] = gradients[i].alpha;
-
         }
-        adamStep(uniforms.adamP, &adamMemory, &gr);
+        adamStepGrad(uniforms.adamP, &adamMemory, &gradients);
         for(var i = 0; i < nGauss; i++) {
 
             let initalParams = output[i];
-            let offA = i * 9;
-            // this is just a vector, when optimizing, no need to convert it
-            let newQ = initalParams.pos - vec2f(gr[offA +0], gr[offA +1]);
-            let newS = initalParams.scale - vec2f(gr[offA +2], gr[offA +3]);
-            let newR = initalParams.rot - gr[offA +4];
-            let newC = initalParams.color - vec3f(gr[offA +5], gr[offA +6], gr[offA +7]);
-            let newA = initalParams.alpha - gr[offA +8];
+
+            let newQ = initalParams.pos - gradients[i].pos;
+            let newS = initalParams.scale - gradients[i].scale;
+            let newR = initalParams.rot - gradients[i].rot;
+            let newC = initalParams.color - gradients[i].color;
+            let newA = initalParams.alpha - gradients[i].alpha;
 
             output[i] = Params(newQ, newS, newR, newC, newA);
         }

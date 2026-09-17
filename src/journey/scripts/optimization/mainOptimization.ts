@@ -2,6 +2,8 @@ import { Pane } from 'tweakpane';
 
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
+import { type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
+
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
@@ -71,12 +73,16 @@ async function main() {
     const lossBuffDesc = lossBuilder.build();
 
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
-    const DIM_GRAD = 18;
-    adamMemoryBuilder.add('t', "u32");
-    adamMemoryBuilder.add('m', { type: "f32", size: DIM_GRAD}) // array;
-    adamMemoryBuilder.add('v', { type: "f32", size: DIM_GRAD}) // array;
 
-    const adamMemoryDesc = adamMemoryBuilder.build();
+    // hacky way, please remove after paralleization
+    const hackySizeAdam = 2 * paramDesc.size + 4.0
+    const adamMemoryDesc : UniformBufferDescriptor = {
+        attributes : [],
+        label: 'hacky adam memory',
+        size: hackySizeAdam,
+        sizeBytes: hackySizeAdam * 4,
+        usage: GPUBufferUsage.COPY_DST,
+    };
     
     const uniBuild = new UniformBufferDescriptorBuilder('gd uniform', "uniform");
     uniBuild.add('lr', "f32")
@@ -290,7 +296,7 @@ async function main() {
 
     const adamMemBuffer = bufferManager.createBuffer(adamMemoryDesc);
 
-    // not really nessesary?
+    // not really nessesary? no, remove adam anyway soon
     const adamMemV = new Float32Array(adamMemoryDesc.size);
     ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
 
