@@ -1,6 +1,9 @@
 import type { UniformBufferDescriptor } from '../mytypes';
 import { sigmoid } from './MathHelpers';
 
+import uPlot from 'uplot';
+
+
 export type FlatParams = {
     posX: number;
     posY: number;
@@ -34,3 +37,83 @@ export function parseParams(data : Float32Array, desc : UniformBufferDescriptor,
             alpha:  r(sigmoid(data[alphaOff], 4.0)),
         };
 }
+
+function maxLabelWidth(self : uPlot, axis : uPlot.Axis, values: string[]) {
+    let ctx = self.ctx;
+    let width = 0;
+
+    if(!axis.font) {
+        return width;
+    }
+    // Preserve the canvas state so the font cache stays valid.
+    ctx.save();
+    ctx.font = axis.font[0];
+
+    for (let value of values ?? []) {
+        if (value != null)
+            width = Math.max(width, ctx.measureText(String(value)).width);
+    }
+
+    ctx.restore();
+
+    return width / uPlot.pxRatio;
+}
+
+export function createLossPlot(plotHTMLBody : HTMLElement) : uPlot {
+
+    const opts : uPlot.Options = {
+        title: "Loss graph",
+        width: 300,
+        height: 256,
+        scales: {
+            x: {
+                time: false,
+            //	auto: false,
+            //	range: [0, 6],
+            },
+        },
+        series: [
+            {
+                label: "step",
+            },
+            {
+                label: "loss",
+                stroke: "red",
+            }
+        ],
+        axes: [
+            {
+                label: "Steps",
+                // scale: '%',
+                values(self, splits) {
+                    return splits.map(s => +s.toFixed(2));
+                }
+            },
+            {
+                label: "L2",
+                labelGap: 8,
+                // scale: '%',
+                stroke: "red",
+                size(self, values, axisIdx) {
+                    let axis = self.axes[axisIdx];
+                    if(!axis.ticks?.size || !axis.gap) {
+                        return 0.0;
+                    }
+                    let axisSize = axis.ticks.size + axis.gap;
+
+                    axisSize += maxLabelWidth(self, axis, values);
+
+                    return Math.ceil(axisSize);
+                },
+            }
+        ],
+    };
+
+
+    let lossDataPlot : uPlot.AlignedData = [];
+
+    return new uPlot(opts, lossDataPlot, plotHTMLBody);
+
+    //     u.setData(getData(points, mult *= 10));    
+}
+

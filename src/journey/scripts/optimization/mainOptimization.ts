@@ -1,12 +1,11 @@
 import { Pane } from 'tweakpane';
 
-import uPlot from 'uplot';
-
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
-import { parseParams, type FlatParams } from '../../../myutils/LogHelpers';
+import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
+
 
 import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
@@ -21,86 +20,12 @@ async function loadImageBitmap(url : string) {
     return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
 }
 
-function maxLabelWidth(self : uPlot, axis : uPlot.Axis, values: string[]) {
-    let ctx = self.ctx;
-    let width = 0;
-
-    if(!axis.font) {
-        return width;
-    }
-    // Preserve the canvas state so the font cache stays valid.
-    ctx.save();
-    ctx.font = axis.font[0];
-
-    for (let value of values ?? []) {
-        if (value != null)
-            width = Math.max(width, ctx.measureText(String(value)).width);
-    }
-
-    ctx.restore();
-
-    return width / uPlot.pxRatio;
-}
-
-const opts : uPlot.Options = {
-    title: "Loss graph",
-    width: 512,
-    height: 256,
-    scales: {
-        x: {
-            time: false,
-        //	auto: false,
-        //	range: [0, 6],
-        },
-    },
-    series: [
-        {
-            label: "step",
-        },
-        {
-            label: "loss",
-            stroke: "red",
-        }
-    ],
-    axes: [
-        {
-            label: "Steps",
-            labelSize: 20,
-            // scale: '%',
-            values(self, splits) {
-                return splits.map(s => +s.toFixed(2));
-            }
-        },
-        {
-            label: "L2",
-            labelGap: 8,
-            labelSize: 8 + 12 + 8,
-            // scale: '%',
-            stroke: "red",
-            size(self, values, axisIdx) {
-                let axis = self.axes[axisIdx];
-                if(!axis.ticks?.size || !axis.gap) {
-                    return 0.0;
-                }
-                let axisSize = axis.ticks.size + axis.gap;
-
-                axisSize += maxLabelWidth(self, axis, values);
-
-                return Math.ceil(axisSize);
-            },
-        }
-    ],
-};
 
 let lossData : number[]  = []
 let lossSteps: number[] = []
-
-let lossDataPlot : uPlot.AlignedData = [];
-
 let plotHTMLElem = document.getElementById('loss-plot') ?? document.body;
-let u = new uPlot(opts, lossDataPlot, plotHTMLElem);
+let lossPlot = createLossPlot(plotHTMLElem);
 
-//     u.setData(getData(points, mult *= 10));
 
 async function main() {
 
@@ -431,11 +356,8 @@ async function main() {
         const lastStep = lossSteps.at(-1) ?? 0;
         lossSteps.push(lastStep + 1);
         
-        const aaa : uPlot.AlignedData = [
-            new Float32Array(lossSteps),
-            new Float32Array(lossData),
-        ];
-        u.setData(aaa);
+        
+        lossPlot.setData([lossSteps, lossData]);
 
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         lossResultBuffer.unmap();  

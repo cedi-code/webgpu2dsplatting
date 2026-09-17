@@ -87,6 +87,9 @@
     min-width: 100px;
     max-width: 280px;
 }
+.plot {
+    background-color: wheat;
+}
 canvas {
     display: block;
     width: 256px;
