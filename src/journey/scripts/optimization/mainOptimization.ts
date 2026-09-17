@@ -11,7 +11,7 @@ import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import simpleTileVert from '../shaders/staticTileVert.wgsl?raw';
 import simpleTextureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
-
+import adamShad from '../../../shaders/adam.wgsl?raw';
 
 async function loadImageBitmap(url : string) {
     const res = await fetch(url);
@@ -25,6 +25,8 @@ let lossSteps: number[] = []
 let plotHTMLElem = document.getElementById('loss-plot') ?? document.body;
 let lossPlot = createLossPlot(plotHTMLElem);
 
+const MACHINE_EPSILON = 1.19e-07;
+
 
 async function main() {
 
@@ -37,8 +39,8 @@ async function main() {
     console.log(ctx.canvas.height);
 
     const csModule = ctx.device.createShaderModule({
-        label: '1d gs module',
-        code: (shaderGaussFunctions + shaderCodeCompute) 
+        label: '2d gs module',
+        code: (adamShad + shaderGaussFunctions + shaderCodeCompute) 
     });
 
     
@@ -68,10 +70,19 @@ async function main() {
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
 
-    console.log(paramDesc);
+    const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
+    const DIM_GRAD = 18;
+    adamMemoryBuilder.add('t', "u32");
+    adamMemoryBuilder.add('m', { type: "f32", size: DIM_GRAD}) // array;
+    adamMemoryBuilder.add('v', { type: "f32", size: DIM_GRAD}) // array;
+
+    const adamMemoryDesc = adamMemoryBuilder.build();
     
     const uniBuild = new UniformBufferDescriptorBuilder('gd uniform', "uniform");
-    uniBuild.add('stepSize', 'f32');    
+    uniBuild.add('lr', "f32")
+            .add('b1', "f32")
+            .add('b2', "f32")
+            .add('eps', "f32");    
     const uniDesc = uniBuild.build();
         
     // == defining the binding layouts
@@ -146,6 +157,14 @@ async function main() {
             buffer: {
                 type: 'storage',
                 minBindingSize: lossBuffDesc.sizeBytes,
+            },
+            },
+            {
+            binding: 5,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: adamMemoryDesc.sizeBytes,
             },
             },
         ],
@@ -269,10 +288,21 @@ async function main() {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 
+    const adamMemBuffer = bufferManager.createBuffer(adamMemoryDesc);
+
+    // not really nessesary?
+    const adamMemV = new Float32Array(adamMemoryDesc.size);
+    ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
+
     // == uniform stuff for interaction ==
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
-    const uniVal = new Float32Array([0.1]); // stepsize
+    const uniVal = new Float32Array([
+        0.1,
+        0.9,
+        0.999,
+        MACHINE_EPSILON
+    ]); // adam params
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniVal , 0);
 
@@ -306,6 +336,7 @@ async function main() {
             { binding: 2, resource: texture },
             { binding: 3, resource: uniBuff },
             { binding: 4, resource: lossBuffer },
+            { binding: 5, resource: adamMemBuffer}
 
         ]
     });
@@ -366,7 +397,7 @@ async function main() {
 
     let runGD = async () => {
 
-        const steps = 30;
+        const steps = 100;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
@@ -415,15 +446,7 @@ async function main() {
             container: document.getElementById("gd-sliders") as HTMLElement,
         });
 
-        // pane.addBinding(PARAMS, 'stepSize', {
-        //     min: 0.001,
-        //     max: 1.0,
-        // }).on('change', (ev) => {
-        //     let s = ev.value;
-        //     uniVal[0] = s;
-        //     ctx.device.queue.writeBuffer(uniBuff, 0, uniVal, 0);
-        //     runGD();
-        // });
+
 
         pane.addBinding(PARAMS_OUT, 'initalQ', {
             readonly: true,
