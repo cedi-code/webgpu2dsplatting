@@ -298,7 +298,7 @@ async function main() {
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
     const uniVal = new Float32Array([
-        0.1,
+        0.05,
         0.9,
         0.999,
         MACHINE_EPSILON
@@ -308,7 +308,7 @@ async function main() {
 
     // == texture stuff
 
-    const testImageUrl = 'assets/testImage2splats.jpg';
+    const testImageUrl = 'assets/greenSquare.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,

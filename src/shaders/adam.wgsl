@@ -9,6 +9,7 @@ struct AdamParams {
     eps: f32,
 };
 
+// todo, adam-memory should NOT EXIST when done correctly / should be allocated with adamInit
 struct AdamMemory {
     t : u32,
     m : array<f32, DIM_GRAD>,

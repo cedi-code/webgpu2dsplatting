@@ -3,7 +3,9 @@ struct Uniform {
 };
 
 struct Params {
-    gauss : GaussParams,
+    pos : vec2f,
+    scale : vec2f,
+    rot : f32,
     color : vec3f,
     alpha: f32,
 };
@@ -17,7 +19,9 @@ struct Params {
 
 
 struct Grad {  
-    gauss: GradGauss,
+    pos: vec2f,
+    scale : vec2f,
+    rot : f32,
     color : vec3f,
     alpha: f32,
 };
@@ -31,29 +35,37 @@ fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
 }
 
 
-fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f32, oneMinusAlpha : f32) -> Grad {
+fn GradLoss(
+    param : ptr<storage, array<Params>, read_write>, // should not be read_write!
+    i : i32, 
+    x: vec2f, 
+    imgC: vec4f,
+    gColor: vec4f,
+    background : f32,
+    oneMinusAlpha : f32,
+    grad : ptr<function, array<Grad, 2>>,
+) {
+    let p = (*param)[i]; // kinda defeats the purpose, but ok for now
+    let gaussP = GaussParams(p.pos, p.scale, p.rot);
+    let gauss = g(gaussP,x);
 
-    let gauss = g(p.gauss,x);
-    // let gColor = vec4f(vecSigmoid(p.color)*p.alpha*gauss, p.alpha);
     let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
 
-    let gradGauss = EvalGradGauss(p.gauss, x);    
+    let gradGauss = EvalGradGauss(gaussP, x);    
     let dLossGauss2 = 2.0 * diff;
 
-    let gradC = vec3f(
+    (*grad)[i].pos += dLossGauss2 * gradGauss.pos;
+    (*grad)[i].scale += dLossGauss2 * gradGauss.scale;
+    (*grad)[i].rot += dLossGauss2 * gradGauss.rot;
+
+    (*grad)[i].color += vec3f(
         (gColor.r - imgC.r) * dSigmoid(p.color.r, 4.0) * sigmoid(p.alpha, 4.0) * gauss,
         (gColor.g - imgC.g) * dSigmoid(p.color.g, 4.0) * sigmoid(p.alpha, 4.0) * gauss,
         (gColor.b - imgC.b) * dSigmoid(p.color.b, 4.0) * sigmoid(p.alpha, 4.0) * gauss,
     );
 
     // alpha gradient    
-    let gradA = 2.0 * diff * (gauss - background) * oneMinusAlpha * dSigmoid(p.alpha, 4.0);    
-
-    let gradLossQ = dLossGauss2 * gradGauss.pos;
-    let gradLossS = dLossGauss2 * gradGauss.scale;
-    let gradLossR = dLossGauss2 * gradGauss.rot;
-
-    return Grad(GradGauss(gradLossQ, gradLossS, gradLossR), gradC, gradA);
+    (*grad)[i].alpha += 2.0 * diff * (gauss - background) * oneMinusAlpha * dSigmoid(p.alpha, 4.0);
 }
 
 
@@ -68,7 +80,6 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f
     var gradients = array<Grad, nGauss>();
 
         var currLoss = 0.0;
-        var paramsPartial = Params(GaussParams(vec2f(0.0), vec2f(0.0), 0.0), vec3f(0.0), 0.0);
 
         currLoss = 0.0;
         for (var y = 0u; y < size.y; y++) {
@@ -82,10 +93,12 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f
 
                 var backgrounds = array<f32, nGauss>();
 
+                // isnt this basically a forward pass?
                 for(var i = 0; i < nGauss; i++) {
                     let p = output[i];
+                    let gaussP = GaussParams(p.pos, p.scale, p.rot);
                     
-                    let gauss = g(p.gauss,uv);
+                    let gauss = g(gaussP,uv);
                     let alpha = gauss * sigmoid(p.alpha, 4.0);
 
                     backgrounds[i] = (gColor.r + gColor.g + gColor.b) / 3.0;
@@ -99,59 +112,55 @@ fn GradLoss_Q_S(p : Params, x: vec2f, imgC: vec4f, gColor: vec4f, background : f
                 var oneMinusAlpha = 1.0;
                 for(var i = nGauss-1; i >= 0; i--) {
                     let p = output[i];
-                    
                     // params
-                    let grad = GradLoss_Q_S(p, uv, colorPreMult, gColor, backgrounds[i], oneMinusAlpha); 
+                    GradLoss(&output, i, uv, colorPreMult, gColor, backgrounds[i], oneMinusAlpha, &gradients); 
 
-                    oneMinusAlpha *= (1.0 - g(p.gauss, uv) * sigmoid(p.alpha, 4.0));
-                    
-                    gradients[i].gauss.pos      += grad.gauss.pos;
-                    gradients[i].gauss.scale    += grad.gauss.scale;
-                    gradients[i].gauss.rot      += grad.gauss.rot;
-                    gradients[i].color          += grad.color;
-                    gradients[i].alpha          += grad.alpha;
-                
+                    let gaussP = GaussParams(p.pos, p.scale, p.rot);
+                    oneMinusAlpha *= (1.0 - g(gaussP, uv) * sigmoid(p.alpha, 4.0));
                 }
                 }
         }
         currLoss /= n;
         lossOutput[0] = currLoss;
 
-        // super ugly but for now i guess
+
         var gr = array<f32,DIM_GRAD>();
 
-        for(var i = 0u; i < nGauss; i++) {
+        for(var i = 0; i < nGauss; i++) {
             
-            let stepQ = gradients[i].gauss.pos / n;
-            let stepS = gradients[i].gauss.scale / n;
-            let stepR = gradients[i].gauss.rot / n;
-            let stepC = gradients[i].color / n;
-            let stepA = gradients[i].alpha / n;
 
-            let offA = i * 9u;
-            gr[offA + 0] = stepQ.x;
-            gr[offA + 1] = stepQ.y;
-            gr[offA + 2] = stepS.x;
-            gr[offA + 3] = stepS.y;
-            gr[offA + 4] = stepR;
-            gr[offA + 5] = stepC.r;
-            gr[offA + 6] = stepC.g;
-            gr[offA + 7] = stepC.b;
-            gr[offA + 8] = stepA;
+            // super ugly but for now i guess
+            gradients[i].pos    /= n;
+            gradients[i].scale  /= n;
+            gradients[i].rot    /= n;
+            gradients[i].color  /= n;
+            gradients[i].alpha  /= n;
+
+            // could be fixed once ADAM optimizer is adapted for gaussian struct
+            let offA = i * 9;
+            gr[offA + 0] = gradients[i].pos.x;
+            gr[offA + 1] = gradients[i].pos.y;
+            gr[offA + 2] = gradients[i].scale.x;
+            gr[offA + 3] = gradients[i].scale.y;
+            gr[offA + 4] = gradients[i].rot;
+            gr[offA + 5] = gradients[i].color.r;
+            gr[offA + 6] = gradients[i].color.g;
+            gr[offA + 7] = gradients[i].color.b;
+            gr[offA + 8] = gradients[i].alpha;
 
         }
         adamStep(uniforms.adamP, &adamMemory, &gr);
-        for(var i = 0u; i < nGauss; i++) {
+        for(var i = 0; i < nGauss; i++) {
 
             let initalParams = output[i];
-            let offA = i * 9u;
+            let offA = i * 9;
             // this is just a vector, when optimizing, no need to convert it
-            let newQ = initalParams.gauss.pos - vec2f(gr[offA +0], gr[offA +1]);
-            let newS = initalParams.gauss.scale - vec2f(gr[offA +2], gr[offA +3]);
-            let newR = initalParams.gauss.rot - gr[offA +4];
+            let newQ = initalParams.pos - vec2f(gr[offA +0], gr[offA +1]);
+            let newS = initalParams.scale - vec2f(gr[offA +2], gr[offA +3]);
+            let newR = initalParams.rot - gr[offA +4];
             let newC = initalParams.color - vec3f(gr[offA +5], gr[offA +6], gr[offA +7]);
             let newA = initalParams.alpha - gr[offA +8];
 
-            output[i] = Params(GaussParams(newQ, newS, newR), newC, newA);
+            output[i] = Params(newQ, newS, newR, newC, newA);
         }
     }
