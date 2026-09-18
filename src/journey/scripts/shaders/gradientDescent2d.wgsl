@@ -123,21 +123,22 @@ fn GradLoss(
         currLoss /= n;
         lossOutput[0] = currLoss;
 
-
-        var gr = array<f32,DIM_GRAD>();
-
         for(var i = 0; i < nGauss; i++) {
-            
-
             // super ugly but for now i guess
             gradients[i].pos    /= n;
             gradients[i].scale  /= n;
             gradients[i].rot    /= n;
             gradients[i].color  /= n;
             gradients[i].alpha  /= n;
-
         }
-        adamStepGrad(uniforms.adamP, &adamMemory, &gradients);
+        adamMemory.t += 1u;
+        var moment = adamMemory.m;
+        var varian = adamMemory.v;
+
+        adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradients);
+        adamMemory.m = moment;
+        adamMemory.v = varian;
+
         for(var i = 0; i < nGauss; i++) {
 
             let initalParams = output[i];

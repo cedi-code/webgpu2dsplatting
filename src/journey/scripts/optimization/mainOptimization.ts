@@ -81,7 +81,7 @@ async function main() {
         label: 'hacky adam memory',
         size: hackySizeAdam,
         sizeBytes: hackySizeAdam * 4,
-        usage: GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     };
     
     const uniBuild = new UniformBufferDescriptorBuilder('gd uniform', "uniform");
@@ -403,7 +403,7 @@ async function main() {
 
     let runGD = async () => {
 
-        const steps = 100;
+        const steps = 200;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);

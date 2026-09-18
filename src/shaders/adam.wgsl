@@ -1,4 +1,3 @@
-
 const NUM_GAUSS = 2;
 
 struct AdamParams {
@@ -17,37 +16,38 @@ struct AdamMemory {
 
 fn adamStepGrad(
     p : AdamParams, 
-    mem : ptr<storage, AdamMemory, read_write>, 
+    t : f32,
+    momentum : ptr<function, array<Grad, NUM_GAUSS>>,
+    variance : ptr<function, array<Grad, NUM_GAUSS>>,
     grad   : ptr<function, array<Grad, NUM_GAUSS>>, // by copy for now
     ) 
 {
-    (*mem).t += 1u;
-    let alpha_t = p.lr * sqrt((1.0 - pow(p.b2, f32((*mem).t))))/(1-p.b1);
+    let alpha_t = p.lr * sqrt((1.0 - pow(p.b2, t)))/(1.0-pow(p.b1, t));
 
     for(var i = 0; i < NUM_GAUSS; i++) {
 
-        let mPos = &((*mem).m[i].pos);
-        let vPos = &((*mem).v[i].pos);
+        let mPos = &((*momentum)[i].pos);
+        let vPos = &((*variance)[i].pos);
         let gPos =  &(*grad)[i].pos;
         adamStepVec2(p, mPos, vPos, gPos, alpha_t);
 
-        let mSca = &(*mem).m[i].scale;
-        let vSca = &(*mem).v[i].scale;
+        let mSca = &(*momentum)[i].scale;
+        let vSca = &(*variance)[i].scale;
         let gSca =  &(*grad)[i].scale;
         adamStepVec2(p, mSca, vSca, gSca, alpha_t);
 
-        let mRot = &(*mem).m[i].rot;
-        let vRot = &(*mem).v[i].rot;
+        let mRot = &(*momentum)[i].rot;
+        let vRot = &(*variance)[i].rot;
         let gRot =  &(*grad)[i].rot;
         adamStepScalar(p,mRot, vRot, gRot, alpha_t);
 
-        let mCol = &(*mem).m[i].color;
-        let vCol = &(*mem).v[i].color;
+        let mCol = &(*momentum)[i].color;
+        let vCol = &(*variance)[i].color;
         let gCol =  &(*grad)[i].color;
         adamStepVec3(p,mCol, vCol, gCol, alpha_t);
 
-        let mAlp = &(*mem).m[i].alpha;
-        let vAlp = &(*mem).v[i].alpha;
+        let mAlp = &(*momentum)[i].alpha;
+        let vAlp = &(*variance)[i].alpha;
         let gAlp =  &(*grad)[i].alpha;
         adamStepScalar(p,mAlp, vAlp, gAlp, alpha_t);
 
@@ -59,8 +59,8 @@ fn adamStepGrad(
 
 fn adamStepScalar(
     p : AdamParams, 
-    m : ptr<storage, f32, read_write>,
-    v : ptr<storage, f32, read_write>,
+    m : ptr<function, f32>,
+    v : ptr<function, f32>,
     grad  : ptr<function, f32>,
     alpha_t : f32
 ) {
@@ -73,8 +73,8 @@ fn adamStepScalar(
 
 fn adamStepVec2(
     p : AdamParams, 
-    m : ptr<storage, vec2f, read_write>,
-    v : ptr<storage, vec2f, read_write>,
+    m : ptr<function, vec2f>,
+    v : ptr<function, vec2f>,
     grad  : ptr<function, vec2f>,
     alpha_t : f32
 ) {
@@ -86,8 +86,8 @@ fn adamStepVec2(
 
 fn adamStepVec3(
     p : AdamParams, 
-    m : ptr<storage, vec3f, read_write>,
-    v : ptr<storage, vec3f, read_write>,
+    m : ptr<function, vec3f>,
+    v : ptr<function, vec3f>,
     grad  : ptr<function, vec3f>,
     alpha_t : f32
 ) {

@@ -16,6 +16,7 @@ export interface VertexBufferDescriptor extends BufferDescriptor {
 export interface UniformBufferDescriptor extends BufferDescriptor {
     attributes: UniformMember[];
     size: number;
+    usage: GPUFlagsConstant;
     unitSize?: number;
     unitSizeBytes?: number;
     count?: number;
