@@ -26,6 +26,8 @@ const tile = array<vec2f, 6>(
 
 @group(0) @binding(0) var<storage, read> output: array<Params>;
 
+const TILE_SCALE = 4.0;
+
 @vertex fn vs(
     @builtin(vertex_index) i : u32,
     @builtin(instance_index) j : u32,
@@ -33,12 +35,14 @@ const tile = array<vec2f, 6>(
 
     let splat = output[j];
     let R : mat2x2f = rotMat(splat.rot);
-    // scale is inverse!
-    let s : vec2f = 4.0*exp(-splat.scale);
-    // convert [0,1] -> [-1, 1] for x
-    let t : vec2f = (splat.pos * vec2f(2.0, -2.0)) - vec2f(1.0, -1.0); 
+    // scale is inverse  + scale the tile a bit which will be undone in fragment shader
+    let s : vec2f = TILE_SCALE*exp(-splat.scale); 
+    let t : vec2f = splat.pos; 
     
-    let posGauss : vec2f = transpose(R) * (s * tile[i]) + t;
+    let posGauss : vec2f = R * (s * tile[i]) + t;
+
+    // uv coords -> ndc coords:
+    let posGaussNDC = posGauss * vec2f(2.0, -2.0) - vec2f(1.0, -1.0);
 
     let col : vec3f = vecSigmoid(splat.color);
     let alpha : f32 = sigmoid(splat.alpha, 4.0);
@@ -46,7 +50,7 @@ const tile = array<vec2f, 6>(
     let gaussZ : f32 = 1.0 - f32(j+1) / 1000.0;
 
     return SimpleVertexShaderOutput(
-        vec4f(posGauss, gaussZ, 1.0),
+        vec4f(posGaussNDC, gaussZ, 1.0),
         vec2f(tile[i]),
         vec4f(col, alpha),
     );

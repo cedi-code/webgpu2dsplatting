@@ -90,10 +90,6 @@ async function main() {
             .add('b2', "f32")
             .add('eps', "f32");    
     const uniDesc = uniBuild.build();
-
-    const forwardBBuild = new UniformBufferDescriptorBuilder('forward pass buffer', "storage", "copy_src_dst");
-    forwardBBuild.add('forward', {type: { type: "vec3f", size: 128 }, size: 128});
-    const forwardBDesc = forwardBBuild.build();
         
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsForward = ctx.device.createBindGroupLayout(
@@ -162,11 +158,12 @@ async function main() {
             },
             },
             {
-            binding: 6,
+            binding: 6, // forward texture
             visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'storage',
-                minBindingSize: forwardBDesc.sizeBytes,
+            texture: {
+                    sampleType: "float", // type for 'rgba8unorm'
+                    viewDimension: "2d",
+                    multisampled: false,
             },
             },
         ],
@@ -226,14 +223,14 @@ async function main() {
         
     });
 
-    const renderPassDescriptor : GPURenderPassDescriptor= {
+    const renderPassDescriptorScreen : GPURenderPassDescriptor= {
         label: 'basic renderpass',
         colorAttachments: [
             {
                 clearValue: [0.0, 0.0, 0.0, 1.0],
                 loadOp: 'clear',
                 storeOp: 'store',
-                view: ctx.context.getCurrentTexture().createView(),
+                view: ctx.context.getCurrentTexture().createView(), 
             },
         ],
         depthStencilAttachment: {
@@ -243,7 +240,35 @@ async function main() {
             view: ctx.context.getCurrentTexture().createView(),
         }
     };
-    ctx.renderPassDescriptor = renderPassDescriptor;
+
+    const textureForward = ctx.device.createTexture({
+        label: 'forwardpass texture',
+        format: 'rgba8unorm',
+        size: [256, 256],
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    const textureForwardView = textureForward.createView();
+    textureForwardView.label = 'forward texture view';
+
+    const renderPassDescriptorTexture : GPURenderPassDescriptor= {
+        label: 'texture renderpass',
+        colorAttachments: [
+            {
+                clearValue: [0.0, 0.0, 0.0, 1.0],
+                loadOp: 'clear',
+                storeOp: 'store',
+                view: textureForwardView,
+            },
+        ],
+        depthStencilAttachment: {
+            depthClearValue: 1.0,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store',
+            view: ctx.context.getCurrentTexture().createView(),
+        }
+    };
+    ctx.renderPassDescriptor = renderPassDescriptorScreen;
 
     // creating buffer
     bufferManager.init(ctx.device);
@@ -310,9 +335,6 @@ async function main() {
     const adamMemV = new Float32Array(adamMemoryDesc.size);
     ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
 
-    const forwardBuffer = bufferManager.createBuffer(forwardBDesc);
-
-
     // == uniform stuff for interaction ==
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
@@ -356,7 +378,7 @@ async function main() {
             { binding: 3, resource: uniBuff },
             { binding: 4, resource: lossBuffer },
             { binding: 5, resource: adamMemBuffer},
-            { binding: 6, resource: forwardBuffer},
+            { binding: 6, resource: textureForward },
         ]
     });
 
@@ -410,11 +432,18 @@ async function main() {
         lossResultBuffer.unmap();  
     }
 
+
+    // render in texture
+    ctx.renderPassDescriptor = renderPassDescriptorTexture;
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats, true);
+
+    // renders on screen
+    ctx.renderPassDescriptor = renderPassDescriptorScreen;
     render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
 
     let runGD = async () => {
 
-        const steps = 50;
+        const steps = 100;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
@@ -447,6 +476,12 @@ async function main() {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
+            // forward pass
+            ctx.renderPassDescriptor = renderPassDescriptorTexture;
+            render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats, true);
+
+            // display on canvas
+            ctx.renderPassDescriptor = renderPassDescriptorScreen;
             render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
         }
         prtyPrint(input);

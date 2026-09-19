@@ -4,11 +4,13 @@ struct SimpleVertexShaderOutput {
     @location(1) color: vec4f,
 };
 
+const TILE_SCALE = 4.0;
+
 @fragment fn fs(
     fsIn : SimpleVertexShaderOutput
     ) -> @location(0) vec4f {
 
-    let gauss = exp(-0.5*8.0 * dot(fsIn.grid , fsIn.grid));
+    let gauss = exp(-0.5*TILE_SCALE*TILE_SCALE * dot(fsIn.grid , fsIn.grid));
     let c = fsIn.color;
     let alpha : f32 = gauss * c.a;
 

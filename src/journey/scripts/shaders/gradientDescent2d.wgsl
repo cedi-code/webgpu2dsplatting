@@ -16,7 +16,7 @@ struct Params {
 @group(0) @binding(3) var<uniform> uniforms : Uniform;
 @group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
 @group(0) @binding(5) var<storage, read_write> adamMemory : AdamMemory;
-@group(0) @binding(6) var<storage, read_write> outputForward: array<array<vec4f, 128>, 128>; 
+@group(0) @binding(6) var forwardTexture : texture_2d<f32>; 
 
 struct Grad {  
     pos: vec2f,
@@ -74,7 +74,7 @@ fn GradLoss(
     (*background) /= (1.0 - alpha + uniforms.adamP.eps);  
 
     (*grad)[i].alpha += dLoss * (gauss - Luminance((*background))) * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0);
-    
+
     (*oneMinusAlpha) *= (1.0 - alpha);
 }
 
@@ -89,31 +89,7 @@ fn GradLoss(
 
     var gradients = array<Grad, nGauss>();
 
-    // todo store this in buffer
-
-    // forward pass
-    for (var y = 0u; y < size.y; y++) {
-        for (var x = 0u; x < size.x; x++) {
-
-            let uv = vec2f(vec2u(x, y)) / sizeSample;
-            
-            var gColor = vec4f(vec3f(0.0), 1.0);
-            var backgrounds = array<f32, nGauss>();
-
-            for(var i = 0; i < nGauss; i++) {
-                let p = output[i];
-                
-                let gaussP = GaussParams(p.pos, p.scale, p.rot);
-                let gauss = g(gaussP,uv);
-                let alpha = gauss * sigmoid(p.alpha, 4.0);
-                
-                gColor *= (1.0 - alpha);
-                gColor += alpha * vec4f(vecSigmoid(p.color), 1.0);
-            }
-
-            outputForward[y][x] = gColor;
-        }
-    }
+    // forward pass TODO move into vs + fs !
 
     // loss + backwards pass
     var currLoss = 0.0;
@@ -123,7 +99,8 @@ fn GradLoss(
             let uv = vec2f(vec2u(x, y)) / sizeSample;
             let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
             let colorPreMult = vec4f(color.rgb * color.a, color.a);
-            let gColor = outputForward[y][x];
+            let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
+            let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
 
             currLoss += Loss(gColor, color);
    

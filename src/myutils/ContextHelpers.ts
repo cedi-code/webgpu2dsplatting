@@ -11,15 +11,19 @@ function render(
     vertexBuffer?: GPUBuffer,
     numVert? : number,
     numInstances? : number,
+    ownAttachment? : boolean
     ) {
 
-    // get current textrure from canvas
-    const canvasTexture = ctx.context.getCurrentTexture();
     if(!ctx.renderPassDescriptor) return;
-    for(let colorAttachment of ctx.renderPassDescriptor.colorAttachments) {
-        if(!colorAttachment) continue; 
-        colorAttachment.view = canvasTexture.createView();
+    // get current textrure from canvas
+    if(!ownAttachment) {
+        const canvasTexture = ctx.context.getCurrentTexture();
+        for(let colorAttachment of ctx.renderPassDescriptor.colorAttachments) {
+            if(!colorAttachment) continue; 
+            colorAttachment.view = canvasTexture.createView();
+        }
     }
+
     if(ctx.renderPassDescriptor.depthStencilAttachment && ctx.depthTexture) {
         ctx.renderPassDescriptor.depthStencilAttachment.view = ctx.depthTexture.createView();
     }
