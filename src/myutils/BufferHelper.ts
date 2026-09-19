@@ -60,18 +60,18 @@ function getByteBaseSize(format: GPUVertexFormat | UniformBaseType): number {
     }
 }
 
-function getByteSize(format: GPUVertexFormat | UniformType) {
+function getByteSize(format: GPUVertexFormat | UniformType) : number {
     if(typeof format === "object") {
         const arrType = format as ArrayType;
-        const baseSize = getByteBaseSize(arrType.type);
-        const baseAlign = alignFromBaseType(arrType.type);
+        const baseSize = getByteSize(arrType.type);
+        const baseAlign = alignFromType(arrType.type);
         const elementStride = Math.ceil(baseSize / baseAlign) * baseAlign;
 
         return elementStride * arrType.size;
     }
     return getByteBaseSize(format as GPUVertexFormat | UniformBaseType);
 }
-// ARRAY IS NOT SUPPORTED YET
+
 //  UniformType = "f32" | "i32" | "u32" | "vec2f" | "vec3f" | "vec4f" | "mat4x4f" | "mat3x3f" | "mat2x2f" | "vec2i" | "vec3i" | "vec4i" | "vec2u" | "vec3u" | "vec4u";
 function alignFromBaseType(type: UniformBaseType): number {
     switch(type) {
@@ -101,7 +101,7 @@ function alignFromBaseType(type: UniformBaseType): number {
 function alignFromType(type: UniformType): number {
     if(typeof type === "object") { // array
         const arrType = type as ArrayType;
-        return alignFromBaseType(arrType.type);
+        return alignFromType(arrType.type);
     }
     return alignFromBaseType(type as UniformBaseType);
 }

@@ -75,7 +75,7 @@ async function main() {
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
     // hacky way, please remove after paralleization
-    const hackySizeAdam = 2 * paramDesc.size + 4.0
+    const hackySizeAdam = 2 * paramDesc.size + 4.0; // + 4.0 because of the t variable
     const adamMemoryDesc : UniformBufferDescriptor = {
         attributes : [],
         label: 'hacky adam memory',
@@ -90,6 +90,10 @@ async function main() {
             .add('b2', "f32")
             .add('eps', "f32");    
     const uniDesc = uniBuild.build();
+
+    const forwardBBuild = new UniformBufferDescriptorBuilder('forward pass buffer', "storage", "copy_src_dst");
+    forwardBBuild.add('forward', {type: { type: "vec3f", size: 128 }, size: 128});
+    const forwardBDesc = forwardBBuild.build();
         
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsFragment = ctx.device.createBindGroupLayout(
@@ -171,6 +175,14 @@ async function main() {
             buffer: {
                 type: 'storage',
                 minBindingSize: adamMemoryDesc.sizeBytes,
+            },
+            },
+            {
+            binding: 6,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: forwardBDesc.sizeBytes,
             },
             },
         ],
@@ -300,6 +312,9 @@ async function main() {
     const adamMemV = new Float32Array(adamMemoryDesc.size);
     ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
 
+    const forwardBuffer = bufferManager.createBuffer(forwardBDesc);
+
+
     // == uniform stuff for interaction ==
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
@@ -342,8 +357,8 @@ async function main() {
             { binding: 2, resource: texture },
             { binding: 3, resource: uniBuff },
             { binding: 4, resource: lossBuffer },
-            { binding: 5, resource: adamMemBuffer}
-
+            { binding: 5, resource: adamMemBuffer},
+            { binding: 6, resource: forwardBuffer},
         ]
     });
 
@@ -403,7 +418,7 @@ async function main() {
 
     let runGD = async () => {
 
-        const steps = 200;
+        const steps = 50;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);

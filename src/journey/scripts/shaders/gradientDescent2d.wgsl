@@ -16,7 +16,7 @@ struct Params {
 @group(0) @binding(3) var<uniform> uniforms : Uniform;
 @group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
 @group(0) @binding(5) var<storage, read_write> adamMemory : AdamMemory;
-
+@group(0) @binding(6) var<storage, read_write> outputForward: array<array<vec4f, 128>, 128>; 
 
 struct Grad {  
     pos: vec2f,
@@ -34,38 +34,48 @@ fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     ) / 3.0;;
 }
 
+fn Luminance(color : vec3f) -> f32 {
+    return (color.r + color.g + color.b) / 3.0;
+}
 
 fn GradLoss(
     param : ptr<storage, array<Params>, read_write>, // should not be read_write!
     i : i32, 
     x: vec2f, 
-    imgC: vec4f,
-    gColor: vec4f,
-    background : f32,
-    oneMinusAlpha : f32,
+    colorDiff : vec3f,
+    background : ptr<function, vec3f>,
+    oneMinusAlpha : ptr<function, f32>,
     grad : ptr<function, array<Grad, 2>>,
 ) {
     let p = (*param)[i]; // kinda defeats the purpose, but ok for now
     let gaussP = GaussParams(p.pos, p.scale, p.rot);
     let gauss = g(gaussP,x);
 
-    let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
+    // let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
+    let dLoss = Luminance(colorDiff);
 
     let gradGauss = EvalGradGauss(gaussP, x);    
-    let dLossGauss2 = 2.0 * diff;
 
-    (*grad)[i].pos += dLossGauss2 * gradGauss.pos;
-    (*grad)[i].scale += dLossGauss2 * gradGauss.scale;
-    (*grad)[i].rot += dLossGauss2 * gradGauss.rot;
+    (*grad)[i].pos +=   dLoss * gradGauss.pos;
+    (*grad)[i].scale += dLoss * gradGauss.scale;
+    (*grad)[i].rot +=   dLoss * gradGauss.rot;
+
+    // color gradient
+    let alpha = gauss * sigmoid(p.alpha, 4.0);
 
     (*grad)[i].color += vec3f(
-        (gColor.r - imgC.r) * dSigmoid(p.color.r, 4.0) * sigmoid(p.alpha, 4.0) * gauss,
-        (gColor.g - imgC.g) * dSigmoid(p.color.g, 4.0) * sigmoid(p.alpha, 4.0) * gauss,
-        (gColor.b - imgC.b) * dSigmoid(p.color.b, 4.0) * sigmoid(p.alpha, 4.0) * gauss,
+        colorDiff.r * dSigmoid(p.color.r, 4.0) * alpha, // (gColor.r - imgC.r)
+        colorDiff.g * dSigmoid(p.color.g, 4.0) * alpha, // (gColor.g - imgC.g)
+        colorDiff.b * dSigmoid(p.color.b, 4.0) * alpha, // (gColor.b - imgC.b)
     );
 
-    // alpha gradient    
-    (*grad)[i].alpha += 2.0 * diff * (gauss - background) * oneMinusAlpha * dSigmoid(p.alpha, 4.0);
+    // alpha gradient  
+    (*background) -= alpha * vecSigmoid(p.color);
+    (*background) /= (1.0 - alpha + uniforms.adamP.eps);  
+
+    (*grad)[i].alpha += dLoss * (gauss - Luminance((*background))) * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0);
+    
+    (*oneMinusAlpha) *= (1.0 - alpha);
 }
 
 
@@ -79,58 +89,73 @@ fn GradLoss(
 
     var gradients = array<Grad, nGauss>();
 
-        var currLoss = 0.0;
+    // todo store this in buffer
 
-        currLoss = 0.0;
-        for (var y = 0u; y < size.y; y++) {
-            for (var x = 0u; x < size.x; x++) {
+    // forward pass
+    for (var y = 0u; y < size.y; y++) {
+        for (var x = 0u; x < size.x; x++) {
 
-                let uv = vec2f(vec2u(x, y)) / sizeSample;
-                let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
-                let colorPreMult = vec4f(color.rgb * color.a, color.a);
+            let uv = vec2f(vec2u(x, y)) / sizeSample;
+            
+            var gColor = vec4f(vec3f(0.0), 1.0);
+            var backgrounds = array<f32, nGauss>();
+
+            for(var i = 0; i < nGauss; i++) {
+                let p = output[i];
                 
-                var gColor = vec4f(vec3f(0.0), 1.0);
-
-                var backgrounds = array<f32, nGauss>();
-
-                // isnt this basically a forward pass?
-                for(var i = 0; i < nGauss; i++) {
-                    let p = output[i];
-                    let gaussP = GaussParams(p.pos, p.scale, p.rot);
-                    
-                    let gauss = g(gaussP,uv);
-                    let alpha = gauss * sigmoid(p.alpha, 4.0);
-
-                    backgrounds[i] = (gColor.r + gColor.g + gColor.b) / 3.0;
-                    
-                    gColor = alpha * vec4f(vecSigmoid(p.color), 1.0) + (1.0 - alpha) * gColor;
-                }
-
-                // loss
-                currLoss += Loss(gColor, color);
+                let gaussP = GaussParams(p.pos, p.scale, p.rot);
+                let gauss = g(gaussP,uv);
+                let alpha = gauss * sigmoid(p.alpha, 4.0);
                 
-                var oneMinusAlpha = 1.0;
-                for(var i = nGauss-1; i >= 0; i--) {
-                    let p = output[i];
-                    // params
-                    GradLoss(&output, i, uv, colorPreMult, gColor, backgrounds[i], oneMinusAlpha, &gradients); 
+                gColor *= (1.0 - alpha);
+                gColor += alpha * vec4f(vecSigmoid(p.color), 1.0);
+            }
 
-                    let gaussP = GaussParams(p.pos, p.scale, p.rot);
-                    oneMinusAlpha *= (1.0 - g(gaussP, uv) * sigmoid(p.alpha, 4.0));
-                }
-                }
+            outputForward[y][x] = gColor;
         }
-        currLoss /= n;
-        lossOutput[0] = currLoss;
+    }
 
-        for(var i = 0; i < nGauss; i++) {
-            // super ugly but for now i guess
-            gradients[i].pos    /= n;
-            gradients[i].scale  /= n;
-            gradients[i].rot    /= n;
-            gradients[i].color  /= n;
-            gradients[i].alpha  /= n;
+    // loss + backwards pass
+    var currLoss = 0.0;
+    var gradsLoss = vec3f(0.0);
+    for (var y = 0u; y < size.y; y++) {
+        for (var x = 0u; x < size.x; x++) {
+            let uv = vec2f(vec2u(x, y)) / sizeSample;
+            let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
+            let colorPreMult = vec4f(color.rgb * color.a, color.a);
+            let gColor = outputForward[y][x];
+
+            currLoss += Loss(gColor, color);
+   
+            let colorGrad = 2.0 * vec3f(
+                (gColor.r - colorPreMult.r),
+                (gColor.g - colorPreMult.g),
+                (gColor.b - colorPreMult.b),
+            );
+
+            var oneMinusAlpha = 1.0;
+            var background = gColor.rgb;
+            for(var i = nGauss-1; i >= 0; i--) {
+                // params
+                GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha, &gradients);                     
+            }
+
         }
+    }
+    currLoss /= n;
+    lossOutput[0] = currLoss;
+
+    for(var i = 0; i < nGauss; i++) {
+        
+        gradients[i].pos    /= n;
+        gradients[i].scale  /= n;
+        gradients[i].rot    /= n;
+        gradients[i].color  /= n;
+        gradients[i].alpha  /= n;
+
+    }
+
+    // adam step
         adamMemory.t += 1u;
         var moment = adamMemory.m;
         var varian = adamMemory.v;

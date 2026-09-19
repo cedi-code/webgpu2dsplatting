@@ -38,7 +38,7 @@ export type UniformType = UniformBaseType | ArrayType;
 
 export type ArrayType = 
 {
-    type: UniformBaseType,
+    type: UniformType,
     size: number,
 }
 
