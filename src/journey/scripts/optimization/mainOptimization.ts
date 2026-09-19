@@ -11,8 +11,8 @@ import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/L
 
 import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
-import simpleTileVert from '../shaders/staticTileVert.wgsl?raw';
-import simpleTextureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
+import gaussTileVertStorage from '../shaders/gaussTileVertStorage.wgsl?raw';
+import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
 
 async function loadImageBitmap(url : string) {
@@ -48,19 +48,19 @@ async function main() {
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
-        code: simpleTileVert 
+        code: shaderGaussFunctions + gaussTileVertStorage,
     });
 
 
     const fsModule = ctx.device.createShaderModule({
         label: 'simple texture frag impl',
-        code: (shaderGaussFunctions + simpleTextureFrag) 
+        code: (gaussFrag) 
     });
     
     // number of splats
-    const numParams = 2;
+    const numSplats = 2;
 
-    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numParams);
+    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numSplats);
     paramBuilder.add('pos', "vec2f")
                 .add('scale', "vec2f")
                 .add('rot', "f32")
@@ -96,37 +96,21 @@ async function main() {
     const forwardBDesc = forwardBBuild.build();
         
     // == defining the binding layouts
-    const bindGroupLayoutDescriptorsFragment = ctx.device.createBindGroupLayout(
+    const bindGroupLayoutDescriptorsForward = ctx.device.createBindGroupLayout(
         {
             entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.FRAGMENT,
-                sampler: {
-                type: "filtering", // type for 'rgba8unorm'
-                },
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.FRAGMENT,
-                texture: {
-                    sampleType: "float", // type for 'rgba8unorm'
-                    viewDimension: "2d",
-                    multisampled: false,
-                },
-            },
             { // uniforms
-                binding: 2,
-                visibility: GPUShaderStage.FRAGMENT,
+                binding: 0,
+                visibility: GPUShaderStage.VERTEX,
                 buffer: {
-                    type: 'storage',
+                    type: 'read-only-storage',
                     minBindingSize: paramDesc.sizeBytes,
+
                 },
                 },
             ],
         },
     );
-
     const bindGroupLayoutCompute = ctx.device.createBindGroupLayout({
         entries: [
             { // dataOutput
@@ -189,8 +173,8 @@ async function main() {
     });
 
     
-    const pipelineLayoutDraw = ctx.device.createPipelineLayout({
-        bindGroupLayouts: [ bindGroupLayoutDescriptorsFragment ],
+    const pipelineLayoutForward = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutDescriptorsForward ],
     });
 
 
@@ -199,9 +183,9 @@ async function main() {
     });
 
     // == creating the pipelines
-    const pipeLineDraw = ctx.device.createRenderPipeline({
+    const pipeLineForward = ctx.device.createRenderPipeline({
         label: 'texture result pipeline',
-        layout: pipelineLayoutDraw,
+        layout: pipelineLayoutForward,
         vertex: {
             entryPoint: 'vs',
             module: vsModule,
@@ -210,7 +194,21 @@ async function main() {
         fragment: {
             entryPoint: 'fs',
             module: fsModule,
-            targets: [{ format: ctx.presentationFormat }],
+            targets: [{ 
+                format: ctx.presentationFormat,
+                blend: {
+                    color: {
+                        operation: 'add',
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                    },
+                    alpha: {
+                        operation: 'add',
+                        srcFactor: 'one',
+                        dstFactor: 'one-minus-src-alpha',
+                    },
+                }
+            }],
         },
         depthStencil: {
             depthWriteEnabled: true,
@@ -232,7 +230,7 @@ async function main() {
         label: 'basic renderpass',
         colorAttachments: [
             {
-                clearValue: [0.3, 0.3, 0.3, 1.0],
+                clearValue: [0.0, 0.0, 0.0, 1.0],
                 loadOp: 'clear',
                 storeOp: 'store',
                 view: ctx.context.getCurrentTexture().createView(),
@@ -278,7 +276,7 @@ async function main() {
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
-        for(let i = 0; i < numParams; i++) {
+        for(let i = 0; i < numSplats; i++) {
             const splatData = data.subarray(unitS*i, unitS*(i+1));
             result.push(parseParams(splatData, paramDesc));
         }
@@ -362,13 +360,11 @@ async function main() {
         ]
     });
 
-    const bindGroupDraw = ctx.device.createBindGroup({
-        label: 'bindGroup draw',
-        layout: pipeLineDraw.getBindGroupLayout(0),
+    const bindGroupForward = ctx.device.createBindGroup({
+        label: 'bindGroup forward',
+        layout: pipeLineForward.getBindGroupLayout(0),
         entries: [
-            { binding: 0, resource: sampler },
-            { binding: 1, resource: texture },
-            { binding: 2, resource: paramBuffer },
+            { binding: 0, resource: paramBuffer },
         ]
     });
 
@@ -414,7 +410,7 @@ async function main() {
         lossResultBuffer.unmap();  
     }
 
-    render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
 
     let runGD = async () => {
 
@@ -451,7 +447,7 @@ async function main() {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
-            render(ctx, pipeLineDraw, bindGroupDraw, undefined, 6, 1);
+            render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
         }
         prtyPrint(input);
 
