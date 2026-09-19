@@ -26,6 +26,8 @@ struct Grad {
     alpha: f32,
 };
 
+const xRAY = true;
+
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
         (gColor.r - imgC.r) * (gColor.r - imgC.r) + 
@@ -51,31 +53,34 @@ fn GradLoss(
     let gaussP = GaussParams(p.pos, p.scale, p.rot);
     let gauss = g(gaussP,x);
 
+
     // let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
     let dLoss = Luminance(colorDiff);
+    let alpha = sigmoid(p.alpha, 4.0);
+
+    (*background) -= alpha * gauss * vecSigmoid(p.color);
+    (*background) /= (1.0 - alpha * gauss + uniforms.adamP.eps);  
+
+    let dAlphaBlend = alpha * Luminance(vecSigmoid(p.color) - (*background));
 
     let gradGauss = EvalGradGauss(gaussP, x);    
 
-    (*grad)[i].pos +=   dLoss * gradGauss.pos;
-    (*grad)[i].scale += dLoss * gradGauss.scale;
-    (*grad)[i].rot +=   dLoss * gradGauss.rot;
+    (*grad)[i].pos   += dLoss * gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY);
+    (*grad)[i].scale += dLoss * gradGauss.scale * select((dAlphaBlend), 1.0, xRAY);
+    (*grad)[i].rot   += dLoss * gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY);
 
     // color gradient
-    let alpha = gauss * sigmoid(p.alpha, 4.0);
 
-    (*grad)[i].color += vec3f(
-        colorDiff.r * dSigmoid(p.color.r, 4.0) * alpha, // (gColor.r - imgC.r)
-        colorDiff.g * dSigmoid(p.color.g, 4.0) * alpha, // (gColor.g - imgC.g)
-        colorDiff.b * dSigmoid(p.color.b, 4.0) * alpha, // (gColor.b - imgC.b)
+    (*grad)[i].color += alpha * gauss * select((*oneMinusAlpha), 1.0, xRAY) * vec3f(
+        colorDiff.r * dSigmoid(p.color.r, 4.0),
+        colorDiff.g * dSigmoid(p.color.g, 4.0),
+        colorDiff.b * dSigmoid(p.color.b, 4.0),
     );
 
     // alpha gradient  
-    (*background) -= alpha * vecSigmoid(p.color);
-    (*background) /= (1.0 - alpha + uniforms.adamP.eps);  
-
     (*grad)[i].alpha += dLoss * (gauss - Luminance((*background))) * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0);
 
-    (*oneMinusAlpha) *= (1.0 - alpha);
+    (*oneMinusAlpha) *= (1.0 - alpha * gauss);
 }
 
 
@@ -88,8 +93,6 @@ fn GradLoss(
     const nGauss = 2;
 
     var gradients = array<Grad, nGauss>();
-
-    // forward pass TODO move into vs + fs !
 
     // loss + backwards pass
     var currLoss = 0.0;
