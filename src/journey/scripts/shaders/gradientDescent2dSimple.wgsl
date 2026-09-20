@@ -4,14 +4,6 @@
 @group(0) @binding(3) var<storage, read_write> lossOutput : f32;
 
 
-struct Grad {  
-    pos: vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
-};
-
 const xRAY = false;
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
@@ -28,12 +20,19 @@ fn Luminance(color : vec3f) -> f32 {
 
 fn GradLoss(
     x: vec2f, 
-    grad : ptr<function, Grad>,
+    grad : ptr<function, GradGauss>,
+    color: vec3f,
 ) {
-    
+    let gauss = g(output, x);
+
+    let gradSample = EvalGradGauss(output, x);
+
+    let diff = 2.0 * Luminance((vec3f(gauss) - color));
+
+    (*grad).pos += gradSample.pos * diff;
+    (*grad).scale += gradSample.scale * diff;
+    (*grad).rot += gradSample.rot * diff;
 }
-
-
 @compute @workgroup_size(1) fn computeGD() {
 
     let size = vec2u(128, 128); // static choosen size
@@ -42,7 +41,7 @@ fn GradLoss(
     
     const nGauss = 1;
 
-    var gradients = Grad();
+    var gradients : GradGauss = GradGauss();
 
     // loss + backwards pass
     var currLoss = 0.0;
@@ -52,10 +51,11 @@ fn GradLoss(
             let uv = vec2f(vec2u(x, y)) / sizeSample;
             let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
             
-            currLoss += Loss(vec4f(0.0), color);
+            let gColor = vec4f(vec3f(g(output, uv)), 1.0);
+            currLoss += Loss(gColor, color);
 
             // params
-            GradLoss(uv, &gradients);                     
+            GradLoss(uv, &gradients, color.rgb);                     
         }
     }
     currLoss /= n;
@@ -67,9 +67,9 @@ fn GradLoss(
 
     let initalParams = output;
 
-    let newQ = initalParams.pos - gradients.pos;
-    let newS = initalParams.scale - gradients.scale;
-    let newR = initalParams.rot - gradients.rot;
+    let newQ = initalParams.pos - 0.01 * gradients.pos;
+    let newS = initalParams.scale - 0.5 * gradients.scale;
+    let newR = initalParams.rot - 0.01 * gradients.rot;
 
     output = GaussParams(newQ, newS, newR);
 }

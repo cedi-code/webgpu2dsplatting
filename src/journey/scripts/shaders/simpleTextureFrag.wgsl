@@ -15,9 +15,14 @@ struct vsOut {
     
     let pNorm = in.p.xy * vec2f(1.0/256.0);
     
-    var resultColor = 1.0 * textureSample(ourTexture, ourSampler, in.texCoord);;
+    var resultColor = 1.0 * textureSample(ourTexture, ourSampler, in.texCoord);
 
-    let gauss = g(output, pNorm);
+    var reflectParam = output;
+
+    reflectParam.pos *= vec2f(1.0, -1.0);
+    reflectParam.pos += vec2f(0.0, 1.0);
+
+    let gauss = g(reflectParam, pNorm);
     let colorGauss = gauss * vec4f(1.0, 0.0, 1.0, 1.0);
 
     return colorGauss + (1.0 - gauss) * resultColor;;

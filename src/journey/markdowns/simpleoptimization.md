@@ -8,11 +8,11 @@ This again I will break down in substeps, to slowley arrive at our goal.
 * [ ] Gradient 2d (+ Texture loading)
 * [ ] The other gradients
 * [ ] Adam
-* [ ] Forward backwards split
+* [ ] SSIM-Loss?
 
 Lets start with a simple example
 
-###### *Loss graph visualization is powerd by [tweakpane](https://tweakpane.github.io/docs/)*
+###### *All graph visualization are powerd by [uplot](https://leeoniya.github.io/uPlot/), Input elements are powerd by [tweakpane](https://tweakpane.github.io/docs/v3/)*
 
 ## gradient descent (and compute shaders)
 

@@ -211,7 +211,7 @@ async function main() {
 
     // gauss 1
     input.set([0.5, 0.5], posOff);
-    input.set([1.8, 1.8], scaleOff);
+    input.set([1.7, 1.7], scaleOff);
     input.set([0.0], rotOff);
 
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
@@ -295,7 +295,6 @@ async function main() {
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
         
-        params_out.finalQ = result[1];        
         input.set(result, 0);
 
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
@@ -309,6 +308,7 @@ async function main() {
         // read loss output
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
+
         lossData.push(result[0].valueOf());
         const lastStep = lossSteps.at(-1) ?? 0;
         lossSteps.push(lastStep + 1);
@@ -326,7 +326,7 @@ async function main() {
 
     let runGD = async () => {
 
-        const steps = 10;
+        const steps = 150;
         for(let i = 0; i < steps; i++) {
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
