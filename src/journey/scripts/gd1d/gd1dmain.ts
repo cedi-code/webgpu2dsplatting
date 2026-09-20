@@ -6,7 +6,33 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import shaderCodeCompute from '../shaders/gradientDescentSimple.wgsl?raw';
 
+import { createLossPlot, creatGaussComparePlot } from '../../../myutils/LogHelpers';
+
 async function main() {
+
+    let lossData : number[]  = []
+    let lossSteps: number[] = []
+
+    let plotHTMLElem = document.getElementById('loss-plot-1d') ?? document.body;
+    let lossPlot = createLossPlot(plotHTMLElem);
+    
+    let samplesPosX : number[] = [];
+    let gaussCurveSolu : number[] = [];
+    let gaussCurveCurr : number[] = [];
+
+
+
+    let plotGaussHTMLElem = document.getElementById('plot-1d-gauss') ?? document.body;
+    let plotGauss = creatGaussComparePlot(plotGaussHTMLElem);
+
+    
+    
+
+    const PARAMS = {
+        stepSize: 0.3,
+        initalQ: -1.0,
+        finalQ: 0.0,
+    };
 
     const ctx = await getWebGPUctx({ canvasId: "compute"});
     if(!ctx) {
@@ -28,18 +54,27 @@ async function main() {
         
     });
     const numSamples = 100; // HAS TO BE CONSISTENT WITH SHADER!
+    const stepSize = 5;
     
     const ySamples = new Float32Array(numSamples);
 
     ySamples.forEach((_,i) => {
         let x = (10.0*i)/numSamples - 5.0; 
+        samplesPosX.push(x);
         ySamples[i] = Math.exp(-0.25*(x-2.0)*(x-2.0));
+        gaussCurveCurr.push(ySamples[i].valueOf());
+        gaussCurveSolu.push(ySamples[i].valueOf());
     });
 
-    const maxSize : number = 100;
+    plotGauss.setData([samplesPosX, gaussCurveCurr, gaussCurveSolu]);
+
+    
+
+
+    const maxSize : number = stepSize + 1.0;
     const input = new Float32Array(maxSize);
-    const initalGuess = Math.random()* 8.0 - 4.0;
-    input[0] = initalGuess;
+    input[0] = PARAMS.initalQ;
+    PARAMS.finalQ = PARAMS.initalQ;
     // creating buffer
     const workBuffer = ctx.device.createBuffer({
         label: 'my loss output buffer',
@@ -87,33 +122,42 @@ async function main() {
         ]
     });
 
-    type Output = {
-        initalQ : number,
-        finalQ: number,
-        lossLog: number,
+    let updateGaussGraph = () => {
+        // really dumb, but i dont care for now
+        gaussCurveCurr = [];
+        ySamples.forEach((_,i) => {
+        let x = (10.0*i)/numSamples - 5.0; 
+            samplesPosX.push(x);
+            let q = PARAMS.finalQ;
+            let g_x = Math.exp(-0.25*(x-q)*(x-q));
+            gaussCurveCurr.push(g_x);
+        });
+
+        plotGauss.setData([samplesPosX, gaussCurveCurr,  gaussCurveSolu]);
     }
 
-    const PARAMS_OUT : Output = {
-        initalQ : initalGuess,
-        finalQ: 0.0,
-        lossLog: 0.0,
-    }
-
-    let updateResults = async (params_out : Output) => {
+    let updateResults = async () => {
         // read results
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
 
-        params_out.finalQ = result[0];
-        params_out.initalQ = initalGuess;
+        PARAMS.finalQ = result[0];
+
+        lossData.push(...result.subarray(1,stepSize).valueOf());
+        const lastStep = lossSteps.at(-1) ?? 0;
+        lossSteps.push(...Array.from(Array(stepSize).keys(),i => i + 1 + lastStep));
         
+        lossPlot.setData([lossSteps, lossData]);
+
+        updateGaussGraph();
+
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         resultBuffer.unmap();        
     }
 
     let runGD = async () => {
 
-        input[0] = initalGuess;
+        input[0] = PARAMS.finalQ;
         ctx.device.queue.writeBuffer(workBuffer, 0, input);
 
         const encoder = ctx.device.createCommandEncoder({
@@ -134,14 +178,12 @@ async function main() {
         const commandBuffer = encoder.finish();
         ctx.device.queue.submit([commandBuffer]);
 
-        updateResults(PARAMS_OUT);
+        updateResults();
     }
 
     await runGD();
 
-    const PARAMS = {
-        stepSize: 0.3,
-    };
+
     
     const pane = new Pane({
         container: document.getElementById("gd-sliders") as HTMLElement,
@@ -154,16 +196,35 @@ async function main() {
         let s = ev.value;
         uniVal[0] = s;
         ctx.device.queue.writeBuffer(uniBuff, 0, uniVal, 0);
+    });
+
+    pane.addBinding(PARAMS, 'initalQ', {
+        readonly: false,
+        min: -5.0,
+        max: 5.0,
+    }).on('change', (ev) => {
+        let s = ev.value;
+        input[0] = s;
+        PARAMS.finalQ = s;
+        ctx.device.queue.writeBuffer(workBuffer, 0, input);
+        updateGaussGraph();
+        lossData = [];
+        lossSteps = [];
+        lossPlot.setData([lossSteps, lossData]);
+    });
+
+    pane.addBinding(PARAMS, 'finalQ', {
+        readonly: true,
+    });
+
+    pane.addButton({
+        'title' : '5 steps',
+        'label' : 'run gradient descent'
+    }).on('click', () => {
         runGD();
     });
 
-    pane.addBinding(PARAMS_OUT, 'initalQ', {
-        readonly: true,
-    });
 
-    pane.addBinding(PARAMS_OUT, 'finalQ', {
-        readonly: true,
-    });
 }
 
 main();

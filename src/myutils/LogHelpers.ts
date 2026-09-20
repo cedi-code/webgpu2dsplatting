@@ -106,3 +106,51 @@ export function createLossPlot(plotHTMLBody : HTMLElement) : uPlot {
     //     u.setData(getData(points, mult *= 10));    
 }
 
+export function creatGaussComparePlot(plotHTMLBody : HTMLElement) : uPlot {
+
+    const opts : uPlot.Options = {
+        title: "Curves",
+        width: 512,
+        height: 256,
+        scales: {
+            x: {
+                time: false,
+            },
+        },
+        series: [
+            {
+                label: "sample",
+            },
+            {
+                label: "approx",
+                stroke: "red",
+            },
+            {
+                label: "solution",
+                stroke: "blue",
+            }
+        ],
+        axes: [
+            {
+                label: "x",
+                // scale: '%',
+                values(self, splits) {
+                    return splits.map(s => +s.toFixed(2));
+                }
+            },
+            {
+                label: "f(x)",
+                labelGap: 8,
+                // scale: '%',
+                stroke: "black",
+            }
+        ],
+    };
+
+
+    let lossDataPlot : uPlot.AlignedData = [];
+
+    return new uPlot(opts, lossDataPlot, plotHTMLBody);
+
+    //     u.setData(getData(points, mult *= 10));    
+}

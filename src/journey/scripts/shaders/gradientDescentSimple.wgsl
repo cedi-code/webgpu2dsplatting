@@ -40,7 +40,7 @@ fn gradL(q : f32) -> f32 {
         let diff = (f(x,q) - y);
         sum += diff * f(x,q) * (x - q);
     }
-    sum *= 1.0 / f32(N);
+    sum *= 4.0 / f32(N);
 
     return sum;
 }
@@ -49,7 +49,7 @@ fn gradL(q : f32) -> f32 {
     var q = dataOutput[0]; // inital guess "hack"
 
     let maxSteps = u32(arrayLength(&dataOutput));
-    for(var i = 0u; i < maxSteps; i++) {
+    for(var i = 1u; i < maxSteps-1u; i++) {
         dataOutput[i] = Loss(q);
 
         let step = gradL(q);

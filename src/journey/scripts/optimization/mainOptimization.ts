@@ -349,7 +349,7 @@ async function main() {
 
     // == texture stuff
 
-    const testImageUrl = 'assets/greenSquare.jpg';
+    const testImageUrl = 'assets/testImage2splats.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,

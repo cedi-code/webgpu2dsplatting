@@ -26,7 +26,7 @@ struct Grad {
     alpha: f32,
 };
 
-const xRAY = true;
+const xRAY = false;
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
