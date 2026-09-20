@@ -41,7 +41,7 @@ And $g(x;\mu, s)$ as a function that takes in our struct:
 fn g(p : GaussParams, x : vec2f) -> f32 {
 
     let d = x - p.pos;
-    let a = p.scale * d;
+    let a = p.scale * p.scale * d;
     let D2 = dot(a, a);
 
     return exp(-0.5 * D2);
@@ -109,6 +109,78 @@ fn gradL(param : GaussParam) -> GaussParams {
 }
 ```
 For the gradients of $\nabla_{\mu} g$ and $\nabla_{s} g$ the derrivations can be seen behind the spoiler tag aswell as the implementation of `gGrad(x,p)`.
+
+<details>
+  <summary>Show derrivation</summary>
+
+We again apply chainrule, $L(\mu, s)$ stays the same the same as before:
+
+$$
+\begin{align*}
+\frac{\partial}{\partial \mu}L(\mu) &= \frac{1}{(N+1)²}\sum_{i=0}^{N}\sum_{j=0}^{N}2(g(x) - y_i)\frac{\partial}{\partial \mu}g(x) &  \\
+& \\
+
+\frac{\partial}{\partial \mu}g(x) &= \frac{\partial}{\partial \mu} e^{-\frac{1}{2}(x-\mu)^T\Sigma^{-1}(s)(x-\mu)} & \\
+
+ &=  -\frac{1}{2}g(x)\frac{\partial}{\partial \mu}(x-\mu)^T\Sigma^{-1}(s)(x-\mu) & \\
+ \quad & (x-\mu) = z  \quad \Sigma^{-1}(s) = A \quad -\frac{1}{2}g(x) = c& \frac{\partial}{\partial \mu}z = -1 \\
+  &=  c*\frac{\partial}{\partial z}z^TAz &    \\
+  &=  c*(A^T + A)z &    \\
+  &= c*2Az & \\
+  &= g(x) \begin{bmatrix}
+s_x^2 & 0 \\
+0 & s_y^2 
+\end{bmatrix} (x-\mu) & \\
+
+
+\end{align*}
+$$
+
+same for $\frac{\partial}{\partial s}g(x)$ aswell:
+
+$$
+\begin{align*}
+\frac{\partial}{\partial s}g(x) &=  -\frac{1}{2}g(x)\frac{\partial}{\partial s}(x-\mu)^T\Sigma^{-1}(s)(x-\mu) & \\
+ \quad & (x-\mu) = z  \quad -\frac{1}{2}g(x) = c &  \\
+  &=  c*\frac{\partial}{\partial s}z^T\Sigma^{-1}(s)z &    \\
+  &=  c*\frac{\partial}{\partial s}\begin{bmatrix}
+z_x & z_y  \\
+
+\end{bmatrix}  \begin{bmatrix}
+s_x^2 & 0 \\
+0 & s_y^2 
+\end{bmatrix} \begin{bmatrix}
+z_x \\ z_y  \\
+
+\end{bmatrix} &    \\
+
+
+&=  c*\frac{\partial}{\partial s} (z_x²s_x² + z_y²s_y²)    &    \\
+  &= c* 2\begin{bmatrix}
+z_x²s_x \\ z_y²s_y  \\
+\end{bmatrix} & \\
+&= -g(x) (x-\mu) \circ (x-\mu) \circ s
+
+\end{align*}
+$$
+</details>
+
+<details>
+  <summary>Show Code</summary>
+
+```wgsl
+fn gGrad(x :vec2f, p : Params) -> GaussParams {
+
+    let gauss = g(x,p);
+
+    let gradQ = gauss * p.scale * p.scale * (x - p.pos);
+    let gradS = -1.0 * gauss * (x - p.pos) * (x - p.pos) * p.scale
+
+    return GaussParams(gradQ, gradS);   
+}
+```
+
+</details>
 
 Cool. This Code could optimize our parameters...but we need something to optimize for, our $y^*$. The part I left out, what is even `dataY[i][j]`?
 
