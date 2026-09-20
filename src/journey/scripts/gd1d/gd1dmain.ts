@@ -20,13 +20,8 @@ async function main() {
     let gaussCurveSolu : number[] = [];
     let gaussCurveCurr : number[] = [];
 
-
-
     let plotGaussHTMLElem = document.getElementById('plot-1d-gauss') ?? document.body;
     let plotGauss = creatGaussComparePlot(plotGaussHTMLElem);
-
-    
-    
 
     const PARAMS = {
         stepSize: 0.3,

@@ -23,6 +23,6 @@ struct vsOut {
     return vsOut(
         vec4(tile[i], 0.0, 1.0),
         vec2(
-            (tile[i] + vec2(1.0,-1.0)) * vec2(0.5, -0.5) // transform to uv space [-1,1] -> [0,1]
-            ));
+            (tile[i] + vec2(1.0)) * 0.5 // transform to uv space [-1,1] -> [0,1]
+        ));
 }
