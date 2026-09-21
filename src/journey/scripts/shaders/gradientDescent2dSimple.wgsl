@@ -1,8 +1,12 @@
+struct Unfirom {
+    activationFlag : i32,
+}
+
 @group(0) @binding(0) var ourSampler: sampler;
 @group(0) @binding(1) var goalTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> output: GaussParams;
 @group(0) @binding(3) var<storage, read_write> lossOutput : f32;
-
+@group(0) @binding(4) var<uniform> uniforms : Unfirom;
 
 const xRAY = false;
 
@@ -24,8 +28,14 @@ fn GradLoss(
     color: vec3f,
 ) {
     let gauss = g(output, x);
+    let dist = (x - output.pos);
 
-    let gradSample = EvalGradGauss(output, x);
+    var gradSample = EvalGradGauss(output, x);
+    if (uniforms.activationFlag <= 0) {
+        // technically wrong but proofs the point
+        gradSample.scale = -1.0 * gauss * dist * dist * output.scale; 
+    }
+
 
     let diff = 2.0 * Luminance((vec3f(gauss) - color));
 

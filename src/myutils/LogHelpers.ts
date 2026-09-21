@@ -59,46 +59,48 @@ function maxLabelWidth(self : uPlot, axis : uPlot.Axis, values: string[]) {
     return width / uPlot.pxRatio;
 }
 
-export function createLossPlot(plotHTMLBody : HTMLElement) : uPlot {
 
-    const opts : uPlot.Options = {
-        title: "Loss graph",
-        width: 300,
-        height: 256,
-        scales: {
-            x: {
-                time: false,
-            //	auto: false,
-            //	range: [0, 6],
+
+export function createLossPlot(plotHTMLBody : HTMLElement, opts? : uPlot.Options ) : uPlot {
+
+    if(!opts) {
+        opts = {
+            title: "Loss graph",
+            width: 300,
+            height: 256,
+            scales: {
+                x: {
+                    time: false,
+                //	auto: false,
+                //	range: [0, 6],
+                },
             },
-        },
-        series: [
-            {
-                label: "step",
-            },
-            {
-                label: "loss",
-                stroke: "red",
-            }
-        ],
-        axes: [
-            {
-                label: "Steps",
-                // scale: '%',
-                values(self, splits) {
-                    return splits.map(s => +s.toFixed(2));
+            series: [
+                {
+                    label: "step",
+                },
+                {
+                    label: "loss",
+                    stroke: "red",
                 }
-            },
-            {
-                label: "L2",
-                labelGap: 8,
-                // scale: '%',
-                stroke: "red",
-            }
-        ],
-    };
-
-
+            ],
+            axes: [
+                {
+                    label: "Steps",
+                    // scale: '%',
+                    values(self, splits) {
+                        return splits.map(s => +s.toFixed(2));
+                    }
+                },
+                {
+                    label: "L2",
+                    labelGap: 8,
+                    // scale: '%',
+                    stroke: "red",
+                }
+            ],
+        };
+    }
     let lossDataPlot : uPlot.AlignedData = [];
 
     return new uPlot(opts, lossDataPlot, plotHTMLBody);

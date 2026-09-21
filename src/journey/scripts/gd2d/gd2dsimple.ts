@@ -22,9 +22,48 @@ async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
 
 
 let lossData : number[]  = []
+let lossData2 : number[]  = []
+
 let lossSteps: number[] = []
 let plotHTMLElem = document.getElementById('loss-plot-2d') ?? document.body;
-let lossPlot = createLossPlot(plotHTMLElem);
+const opts = {
+        title: "Loss graph",
+        width: 300,
+        height: 256,
+        scales: {
+            x: {
+                time: false,
+            //	auto: false,
+            //	range: [0, 6],
+            },
+        },
+        series: [
+            {
+                label: "step",
+            },
+            {
+                label: "loss with act.",
+                stroke: "red",
+            },
+            {
+                label: "loss no act.",
+                stroke: "blue",
+            },
+        ],
+        axes: [
+            {
+                label: "Steps",
+                // scale: '%',
+            },
+            {
+                label: "L2",
+                labelGap: 8,
+                // scale: '%',
+                stroke: "red",
+            }
+        ],
+    };
+let lossPlot = createLossPlot(plotHTMLElem, opts);
 
 async function main() {
 
@@ -65,6 +104,10 @@ async function main() {
     const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst');
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
+
+    const uniBuilder = new UniformBufferDescriptorBuilder('uni storage', 'uniform');
+    uniBuilder.add('activation', "i32");
+    const uniDesc = uniBuilder.build();
         
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsForward = ctx.device.createBindGroupLayout(
@@ -88,6 +131,15 @@ async function main() {
                 },
                 {
                 binding: 2,
+                visibility: GPUShaderStage.FRAGMENT,
+                buffer: {
+                    type: 'read-only-storage',
+                    minBindingSize: paramDesc.sizeBytes,
+
+                },
+                },
+                {
+                binding: 3,
                 visibility: GPUShaderStage.FRAGMENT,
                 buffer: {
                     type: 'read-only-storage',
@@ -130,6 +182,14 @@ async function main() {
             buffer: {
                 type: 'storage',
                 minBindingSize: lossBuffDesc.sizeBytes,
+            },
+            },
+            { // uniform
+            binding: 4,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'uniform',
+                minBindingSize: uniDesc.sizeBytes,
             },
         },
         ],
@@ -201,6 +261,7 @@ async function main() {
     bufferManager.init(ctx.device);
 
     const paramBuffer = bufferManager.createBuffer(paramDesc);
+    const paramBuffer2 = bufferManager.createBuffer(paramDesc);
 
     const posOff    = paramDesc.attributes[0].offset;
     const scaleOff  = paramDesc.attributes[1].offset;
@@ -211,10 +272,11 @@ async function main() {
 
     // gauss 1
     input.set([0.5, 0.5], posOff);
-    input.set([1.7, 1.7], scaleOff);
+    input.set([1.7, 2.0], scaleOff);
     input.set([0.0], rotOff);
 
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+    ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
 
     // loss result buffer
     const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
@@ -234,7 +296,14 @@ async function main() {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 
+    // == uniform buff
+    const uniBuffer = bufferManager.createBuffer(uniDesc);
 
+    const uniV = new Int32Array(uniDesc.size);
+
+    uniV.set([0], uniDesc.attributes[0].offset);
+
+    ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
     // == texture stuff
 
     const testImageUrl = 'assets/testImage.jpg';
@@ -265,6 +334,21 @@ async function main() {
             { binding: 1, resource: texture },
             { binding: 2, resource: paramBuffer },
             { binding: 3, resource: lossBuffer },
+            { binding: 4, resource: uniBuffer },
+
+                ]
+    });
+
+    const bindGroupWorker2 = ctx.device.createBindGroup({
+        label: 'bindGroup workbuffer',
+        layout: pipelineCompute.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: sampler },
+            { binding: 1, resource: texture },
+            { binding: 2, resource: paramBuffer2 },
+            { binding: 3, resource: lossBuffer },
+            { binding: 4, resource: uniBuffer },
+
                 ]
     });
 
@@ -275,6 +359,8 @@ async function main() {
             { binding: 0, resource: sampler },
             { binding: 1, resource: texture },
             { binding: 2, resource: paramBuffer },
+            { binding: 3, resource: paramBuffer2 },
+
         ]
     });
 
@@ -290,7 +376,7 @@ async function main() {
         lossLog: 0.0,
     }
 
-    let updateResults = async (params_out : Output) : Promise<Float32Array<ArrayBuffer>> => {
+    let updateResults = async () : Promise<Float32Array<ArrayBuffer>> => {
         // read results
         await resultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(resultBuffer.getMappedRange());
@@ -309,12 +395,16 @@ async function main() {
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
 
-        lossData.push(result[0].valueOf());
-        const lastStep = lossSteps.at(-1) ?? 0;
-        lossSteps.push(lastStep + 1);
-        
+        if(uniV[0] == 1) {
+            lossData.push(result[0].valueOf());
+        } else {
+            lossData2.push(result[0].valueOf());
+            const lastStep = lossSteps.at(-1) ?? 0;
+            lossSteps.push(lastStep + 1);
+            
+            lossPlot.setData([lossSteps, lossData,lossData2]);
+        }
 
-        lossPlot.setData([lossSteps, lossData]);
 
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         lossResultBuffer.unmap();  
@@ -329,7 +419,9 @@ async function main() {
         const steps = 150;
         for(let i = 0; i < steps; i++) {
 
-            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+            // ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+            uniV.set([1], uniDesc.attributes[0].offset);
+            ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
 
             const encoder = ctx.device.createCommandEncoder({
                 label: 'gd encoder',
@@ -352,13 +444,42 @@ async function main() {
             ctx.device.queue.submit([commandBuffer]);
 
             // this updates the input values, not clean
-            await updateResults(PARAMS_OUT);
+            await updateResults();
 
             // updates loss plot
             await updateLossResults();
 
             ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
+            // == repeat for other buffer == 
+            uniV.set([0], uniDesc.attributes[0].offset);
+            ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
+            const encoder2 = ctx.device.createCommandEncoder({
+                label: 'gd encoder 2!',
+            });
+            const pass2 = encoder2.beginComputePass({
+                label: 'dumb gradient descent compute pass 2',
+            });
+            pass2.setPipeline(pipelineCompute);
+            pass2.setBindGroup(0, bindGroupWorker2);
+            pass2.dispatchWorkgroups(1);
+            pass2.end();
+
+            // mapping result to my buffer
+            encoder2.copyBufferToBuffer(paramBuffer2, 0, resultBuffer, 0, resultBuffer.size);
+            encoder2.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+
+            // re-run the work lmao
+            const commandBuffer2 = encoder2.finish();
+            ctx.device.queue.submit([commandBuffer2]);
+
+            // this updates the input values, not clean
+            await updateResults();
+
+            // updates loss plot
+            await updateLossResults();
+
+            ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
 
             // display on canvas
             ctx.renderPassDescriptor = renderPassDescriptorScreen;

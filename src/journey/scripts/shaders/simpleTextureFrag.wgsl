@@ -8,6 +8,15 @@ struct vsOut {
 @group(0) @binding(0) var ourSampler: sampler;
 @group(0) @binding(1) var ourTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read> output: GaussParams;
+@group(0) @binding(3) var<storage, read> outputNoActivation: GaussParams;
+
+fn gCorrected(p : GaussParams, x : vec2f) -> f32 {
+    var pp = p;
+    pp.pos *= vec2f(1.0, -1.0);
+    pp.pos += vec2f(0.0, 1.0);
+
+    return g(pp, x);
+}
 
 @fragment fn fs(
     in : vsOut
@@ -17,14 +26,16 @@ struct vsOut {
     
     var resultColor = 1.0 * textureSample(ourTexture, ourSampler, in.texCoord);
 
-    var reflectParam = output;
+    var p = output;
 
-    reflectParam.pos *= vec2f(1.0, -1.0);
-    reflectParam.pos += vec2f(0.0, 1.0);
+    let gauss = gCorrected(p, pNorm);
+    let colorGauss =  select(vec4f(0.0), vec4f(1.0, 0.0, 0.0, 1.0), gauss > 0.4);
 
-    let gauss = g(reflectParam, pNorm);
-    let colorGauss = gauss * vec4f(1.0, 0.0, 1.0, 1.0);
+    var p2 = outputNoActivation;
 
-    return colorGauss + (1.0 - gauss) * resultColor;;
+    let gauss2 = gCorrected(p2, pNorm);
+    let colorGauss2 =  select(vec4f(0.0), vec4f(0.0, 0.0, 1.0, 1.0), gauss2 > 0.4);
+
+    return colorGauss2 +  colorGauss + (1.0 - gauss2) * (1.0 - gauss) * resultColor;
 
 }
