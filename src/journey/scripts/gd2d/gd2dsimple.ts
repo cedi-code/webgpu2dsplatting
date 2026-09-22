@@ -389,23 +389,17 @@ async function main() {
         return result;
     }
 
-    let updateLossResults = async () => {
+    let updateLossResults = async (flag : number) => {
 
         // read loss output
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
 
-        if(uniV[0] == 1) {
+        if(flag == 0) {
             lossData.push(result[0].valueOf());
         } else {
             lossData2.push(result[0].valueOf());
-            const lastStep = lossSteps.at(-1) ?? 0;
-            lossSteps.push(lastStep + 1);
-            
-            lossPlot.setData([lossSteps, lossData,lossData2]);
         }
-
-
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
         lossResultBuffer.unmap();  
     }
@@ -414,72 +408,88 @@ async function main() {
     ctx.renderPassDescriptor = renderPassDescriptorScreen;
     render(ctx, pipeLineForward, bindGroupTexture, undefined, 6, numSplats);
 
+    const PARAMS = {
+            showActivation: true,
+            showNoActivation: true,
+    };
+
     let runGD = async () => {
 
         const steps = 150;
         for(let i = 0; i < steps; i++) {
 
             // ctx.device.queue.writeBuffer(paramBuffer, 0, input);
-            uniV.set([1], uniDesc.attributes[0].offset);
-            ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
+            if(PARAMS.showActivation) {
+                
+                uniV.set([1], uniDesc.attributes[0].offset);
+                ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
 
-            const encoder = ctx.device.createCommandEncoder({
-                label: 'gd encoder',
-            });
-            const pass = encoder.beginComputePass({
-                label: 'dumb gradient descent compute pass',
-            });
-            pass.setPipeline(pipelineCompute);
-            pass.setBindGroup(0, bindGroupWorker);
-            pass.dispatchWorkgroups(1);
-            pass.end();
+                const encoder = ctx.device.createCommandEncoder({
+                    label: 'gd encoder',
+                });
+                const pass = encoder.beginComputePass({
+                    label: 'dumb gradient descent compute pass',
+                });
+                pass.setPipeline(pipelineCompute);
+                pass.setBindGroup(0, bindGroupWorker);
+                pass.dispatchWorkgroups(1);
+                pass.end();
 
-            // mapping result to my buffer
-            encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);
-            encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+                // mapping result to my buffer
+                encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);
+                encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
 
 
-            // run the work lmao
-            const commandBuffer = encoder.finish();
-            ctx.device.queue.submit([commandBuffer]);
+                // run the work lmao
+                const commandBuffer = encoder.finish();
+                ctx.device.queue.submit([commandBuffer]);
 
-            // this updates the input values, not clean
-            await updateResults();
+                // this updates the input values, not clean
+                await updateResults();
 
-            // updates loss plot
-            await updateLossResults();
+                // updates loss plot
+                await updateLossResults(0);
 
-            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+                ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+            }
 
-            // == repeat for other buffer == 
-            uniV.set([0], uniDesc.attributes[0].offset);
-            ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
-            const encoder2 = ctx.device.createCommandEncoder({
-                label: 'gd encoder 2!',
-            });
-            const pass2 = encoder2.beginComputePass({
-                label: 'dumb gradient descent compute pass 2',
-            });
-            pass2.setPipeline(pipelineCompute);
-            pass2.setBindGroup(0, bindGroupWorker2);
-            pass2.dispatchWorkgroups(1);
-            pass2.end();
+            if(PARAMS.showNoActivation) {
 
-            // mapping result to my buffer
-            encoder2.copyBufferToBuffer(paramBuffer2, 0, resultBuffer, 0, resultBuffer.size);
-            encoder2.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+                // == repeat for other buffer == 
+                uniV.set([0], uniDesc.attributes[0].offset);
+                ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
+                const encoder2 = ctx.device.createCommandEncoder({
+                    label: 'gd encoder 2!',
+                });
+                const pass2 = encoder2.beginComputePass({
+                    label: 'dumb gradient descent compute pass 2',
+                });
+                pass2.setPipeline(pipelineCompute);
+                pass2.setBindGroup(0, bindGroupWorker2);
+                pass2.dispatchWorkgroups(1);
+                pass2.end();
 
-            // re-run the work lmao
-            const commandBuffer2 = encoder2.finish();
-            ctx.device.queue.submit([commandBuffer2]);
+                // mapping result to my buffer
+                encoder2.copyBufferToBuffer(paramBuffer2, 0, resultBuffer, 0, resultBuffer.size);
+                encoder2.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
 
-            // this updates the input values, not clean
-            await updateResults();
+                // re-run the work lmao
+                const commandBuffer2 = encoder2.finish();
+                ctx.device.queue.submit([commandBuffer2]);
 
-            // updates loss plot
-            await updateLossResults();
+                // this updates the input values, not clean
+                await updateResults();
 
-            ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
+                // updates loss plot
+                await updateLossResults(1);
+
+                ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
+            }
+
+            // update loss graph
+            const lastStep = lossSteps.at(-1) ?? 0;
+            lossSteps.push(lastStep + 1);
+            lossPlot.setData([lossSteps, lossData,lossData2]);
 
             // display on canvas
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
@@ -488,19 +498,58 @@ async function main() {
     }
     // == interactive suff, not really needed
     {
-        // const PARAMS = {
-        //     stepSize: 0.3,
-        // };
+    let resetGD = () => {
+        lossData = []
+        lossData2 = []
+        lossSteps = []
+        lossPlot.setData([lossSteps, lossData,lossData2]);
+
+        // reset gauss 1
+        input.set([0.5, 0.5], posOff);
+        input.set([1.7, 2.0], scaleOff);
+        input.set([0.0], rotOff);
+
+        ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+        ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
+
+        if(!PARAMS.showActivation) {
+            input.set([100, 100], posOff); // ugly af
+            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+        }
+
+        if(!PARAMS.showNoActivation) {
+            input.set([100, 100], posOff); // ugly af
+            ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
+        }
+
+        ctx.renderPassDescriptor = renderPassDescriptorScreen;
+        render(ctx, pipeLineForward, bindGroupTexture, undefined, 6, numSplats);
+    }
+
         
         const pane = new Pane({
             container: document.getElementById("gd-sliders-2d") as HTMLElement,
+        });
+
+        pane.addBinding(PARAMS, 'showActivation', {
+            label: 'red'
+        }).on('change', (ev) => {
+            resetGD();
+        });
+
+        pane.addBinding(PARAMS, 'showNoActivation', {
+            label: 'blue'
+        }).on('change', (ev) => {
+            resetGD();
         });
 
         pane.addButton({
             title: 'gd step',
             label: 'step'
         }).on('click', async () => {
-            await runGD();
+            if(PARAMS.showActivation || PARAMS.showNoActivation) {
+                await runGD();
+            }
         });
     }
 

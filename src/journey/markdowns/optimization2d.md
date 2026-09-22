@@ -344,4 +344,70 @@ But there is one more thing...
 
 ### Activation Functions
 
-todo: have our toy example show both losses, one with activation function and one without.
+When reading the [3dgs paper](https://arxiv.org/pdf/2308.04079) in chapter 5.1 paraphrased it says:
+> We use a exponential activation function for the scale of the covariance constrain it in the $[0 ,\infty)$ range and obtain smooth gradients,.
+
+so as a activation function for $s$ we could take:
+
+$$
+\sigma(x) = e^{x}
+$$
+this gives us two properties
+* $\sigma(x)$ is always positive
+* for a linear step in $x$, activation function $\sigma(s)$ grows exponentially 
+
+which changes our parameterization to this:
+
+$$
+s = \begin{bmatrix}
+s_x \\
+s_y  
+\end{bmatrix} 
+\quad
+\Sigma^{-1}(s) =
+\begin{bmatrix}
+\sigma(s_x) & 0 \\
+0 & \sigma(s_y)
+\end{bmatrix} 
+ =
+\begin{bmatrix}
+e^{2s_x} & 0 \\
+0 & e^{2s_y} 
+\end{bmatrix} 
+$$
+
+This changes our derrivatives for the step:
+<details>
+  <summary>Show derrivation</summary>
+
+$$
+\begin{align*}
+\frac{\partial}{\partial s}g(x) &= -g(x) (x-\mu) \circ (x-\mu) \circ  \begin{bmatrix}
+e^{2s_x}  \\
+e^{2s_y} 
+\end{bmatrix} 
+\end{align*}
+$$
+</details>
+
+<details>
+  <summary>Show Code</summary>
+
+```wgsl
+fn gGrad(x :vec2f, p : Params) -> GaussParams {
+
+    let gauss = g(x,p);
+
+    let gradQ = gauss * p.scale * p.scale * (x - p.pos);
+    let gradS = -1.0 * gauss * (x - p.pos) * (x - p.pos) * p.scale // [!code --]
+    let gradS = -1.0 * gauss * (x - p.pos) * (x - p.pos) * exp(2.0*p.scale) // [!code ++]
+
+    return GaussParams(gradQ, gradS);   
+}
+```
+</details>
+
+bellow you can see the activation function in action! red would with $\sigma(x)$ and blue without. when both splats overlapp they produce purple. as you can see, red converges much quicker than blue.
+
+##### *sidenote: for binding both a texture to compute shader and a fragment shader you need to specify a layout, I will go further into detail later in this chapter.*
+
