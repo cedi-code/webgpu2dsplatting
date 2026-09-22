@@ -27,6 +27,17 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+
+      # unpack asset folder
+      - name: Download assets from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Download the zip attached to tag 'assets-v1'
+          gh release download assets-v1 --pattern "assetsV1.zip" --dir .
+          
+          unzip -o assetsV1.zip -d ./dist/
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'

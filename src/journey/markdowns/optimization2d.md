@@ -378,7 +378,7 @@ $$
 
 This changes our derrivatives for the step:
 <details>
-  <summary>Show derrivation</summary>
+  <summary>Show gradient</summary>
 
 $$
 \begin{align*}
