@@ -50,10 +50,10 @@ $$
 \operatorname*{arg\,min}_{\mu \in \mathbb{R}} L(\mu)
 $$
 
-We now do itterative optimization using gradient descent, meaning updating our inital guess $\mu$ in the direction the the gradient $\nabla L$ with a certain stepsize $\eta$. 
+We now do itterative optimization using gradient descent, meaning updating our inital guess $\mu$ in the direction the the gradient $\nabla L$ with a certain stepsize $\alpha$. 
 
 $$
-    \mu_{t+1} = \mu_t - \eta * \nabla L(\mu_{t})
+    \mu_{t+1} = \mu_t - \alpha * \nabla L(\mu_{t})
 $$
 we keep updating until the gradient $\nabla L(\mu_{t}) \approx 0$ reaching a local minima.
 
