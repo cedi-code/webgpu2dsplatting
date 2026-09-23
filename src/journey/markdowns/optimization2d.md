@@ -366,13 +366,13 @@ s_y
 \quad
 \Sigma^{-1}(s) =
 \begin{bmatrix}
-\sigma(s_x) & 0 \\
-0 & \sigma(s_y)
+\sigma(-s_x)^2 & 0 \\
+0 & \sigma(-s_y)^2
 \end{bmatrix} 
  =
 \begin{bmatrix}
-e^{2s_x} & 0 \\
-0 & e^{2s_y} 
+e^{-2s_x} & 0 \\
+0 & e^{-2s_y} 
 \end{bmatrix} 
 $$
 

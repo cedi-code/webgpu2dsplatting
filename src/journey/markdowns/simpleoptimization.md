@@ -6,8 +6,8 @@ This again I will break down in substeps, to slowley arrive at our goal.
 ### Optimization Step
 * [ ] gradient descent + comute shaders
 * [ ] Gradient 2d (+ Texture loading)
-* [ ] The other gradients
 * [ ] Adam
+* [ ] The other gradients
 * [ ] SSIM-Loss?
 
 Lets start with a simple example
