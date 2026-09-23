@@ -132,3 +132,7 @@ where we combine the $\^{M}$ and $\^{V}$ computation directly by creating $\alph
 $$
 \alpha_t = \alpha \frac{\sqrt{1-\beta_2^t}}{1-\beta_1^t}
 $$
+
+Same example as before, this time both have activation functions for scale $\sigma(s)$ but red uses ADAM, and blue uses our static stepsize $\alpha$.
+
+Red has much more *momentum* than blue :) 

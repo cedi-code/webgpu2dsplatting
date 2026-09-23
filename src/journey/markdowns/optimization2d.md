@@ -407,7 +407,7 @@ fn gGrad(x :vec2f, p : Params) -> GaussParams {
 ```
 </details>
 
-bellow you can see the activation function in action! red would with $\sigma(x)$ and blue without. when both splats overlapp they produce purple. as you can see, red converges much quicker than blue.
+bellow you can see the activation function in action! red would with $\sigma(x)$ and blue without. when both splats overlapp they produce purple. as you can see, red converges much better than blue.
 
 ##### *sidenote: for binding both a texture to compute shader and a fragment shader you need to specify a layout, I will go further into detail later in this chapter.*
 

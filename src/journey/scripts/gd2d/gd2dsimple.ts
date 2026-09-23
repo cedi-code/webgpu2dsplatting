@@ -13,6 +13,9 @@ import shaderCodeCompute from '../shaders/gradientDescent2dSimple.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import staticTileVert from '../shaders/staticTileVert.wgsl?raw';
 import textureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
+import adamShad from '../../../shaders/adam.wgsl?raw';
+import type uPlot from 'uplot';
+
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -20,13 +23,8 @@ async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
 }
 
-
-let lossData : number[]  = []
-let lossData2 : number[]  = []
-
-let lossSteps: number[] = []
 let plotHTMLElem = document.getElementById('loss-plot-2d') ?? document.body;
-const opts = {
+let opts = {
         title: "Loss graph",
         width: 300,
         height: 256,
@@ -65,9 +63,26 @@ const opts = {
     };
 let lossPlot = createLossPlot(plotHTMLElem, opts);
 
-async function main() {
+let plotHTMLElem2 = document.getElementById('loss-plot-adam') ?? document.body;
+opts.series[1].label = "loss with adam";
+opts.series[2].label = "loss no adam";
+let lossPlotAdam = createLossPlot(plotHTMLElem2, opts);
 
-    const ctx = await getWebGPUctx({ canvasId: "gd2dsimple"});
+
+const paneAct = new Pane({
+    container: document.getElementById("gd-sliders-2d") as HTMLElement,
+});
+
+const paneAdam = new Pane({
+    container: document.getElementById("gd-sliders-adam") as HTMLElement,
+});
+
+async function main(canvasName : string, plot : uPlot, pane : Pane,  showAdam : boolean) {
+
+    let lossData : number[]  = []
+    let lossData2 : number[]  = []
+    let lossSteps: number[] = []
+    const ctx = await getWebGPUctx({ canvasId: canvasName});
     if(!ctx) {
         return;
     }
@@ -78,7 +93,7 @@ async function main() {
 
     const csModule = ctx.device.createShaderModule({
         label: 'simple 2d gs module',
-        code: (shaderGaussFunctions + shaderCodeCompute) 
+        code: (adamShad + shaderGaussFunctions + shaderCodeCompute) 
     });
 
 
@@ -105,9 +120,25 @@ async function main() {
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
 
+    const numFlags = 2;
     const uniBuilder = new UniformBufferDescriptorBuilder('uni storage', 'uniform');
-    uniBuilder.add('activation', "i32");
+    uniBuilder.add('lr', "f32")
+              .add('b1', "f32")
+              .add('b2', "f32")
+              .add('eps', "f32")
+              .add('activation', "i32")
+              .add('adam', "i32");
     const uniDesc = uniBuilder.build();
+
+        // hacky way, please remove after paralleization
+    const hackySizeAdam = 2 * paramDesc.size + 4.0; // + 4.0 because of the t variable
+    const adamMemoryDesc : UniformBufferDescriptor = {
+        attributes : [],
+        label: 'hacky adam memory',
+        size: hackySizeAdam,
+        sizeBytes: hackySizeAdam * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    };
         
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsForward = ctx.device.createBindGroupLayout(
@@ -190,6 +221,14 @@ async function main() {
             buffer: {
                 type: 'uniform',
                 minBindingSize: uniDesc.sizeBytes,
+            },
+            },
+            {
+            binding: 5,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: adamMemoryDesc.sizeBytes,
             },
         },
         ],
@@ -297,13 +336,33 @@ async function main() {
     });
 
     // == uniform buff
+    const MACHINE_EPSILON = 1.19e-07;
     const uniBuffer = bufferManager.createBuffer(uniDesc);
 
-    const uniV = new Int32Array(uniDesc.size);
+    const uniV =  new ArrayBuffer(uniDesc.sizeBytes); // adam params
+    const uniVAdam = new Float32Array(uniV, uniDesc.attributes[0].offsetBytes, 4);
+    const uniVFlags = new Int32Array(uniV, uniDesc.attributes[4].offsetBytes, numFlags);
 
-    uniV.set([0], uniDesc.attributes[0].offset);
+    uniDesc.attributes[0].offset;
+    uniVAdam.set([
+        0.01,
+        0.9,
+        0.999,
+        MACHINE_EPSILON
+    ]);
+    uniVFlags.set([
+        1,  // use activation function
+        0,  // do not use adam optimizer
+    ])
 
     ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
+
+    // == adam sutff
+    const adamMemBuffer = bufferManager.createBuffer(adamMemoryDesc);
+    // reset
+    const adamMemV = new Float32Array(adamMemoryDesc.size);
+    ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
+
     // == texture stuff
 
     const testImageUrl = 'assets/testImage.jpg';
@@ -335,6 +394,7 @@ async function main() {
             { binding: 2, resource: paramBuffer },
             { binding: 3, resource: lossBuffer },
             { binding: 4, resource: uniBuffer },
+            { binding: 5, resource: adamMemBuffer },
 
                 ]
     });
@@ -348,6 +408,7 @@ async function main() {
             { binding: 2, resource: paramBuffer2 },
             { binding: 3, resource: lossBuffer },
             { binding: 4, resource: uniBuffer },
+            { binding: 5, resource: adamMemBuffer },
 
                 ]
     });
@@ -421,7 +482,8 @@ async function main() {
             // ctx.device.queue.writeBuffer(paramBuffer, 0, input);
             if(PARAMS.showActivation) {
                 
-                uniV.set([1], uniDesc.attributes[0].offset);
+                uniVFlags.set([1], showAdam ? 1 : 0);
+
                 ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
 
                 const encoder = ctx.device.createCommandEncoder({
@@ -456,7 +518,7 @@ async function main() {
             if(PARAMS.showNoActivation) {
 
                 // == repeat for other buffer == 
-                uniV.set([0], uniDesc.attributes[0].offset);
+                uniVFlags.set([0], showAdam ? 1 : 0);
                 ctx.device.queue.writeBuffer(uniBuffer, 0, uniV);
                 const encoder2 = ctx.device.createCommandEncoder({
                     label: 'gd encoder 2!',
@@ -489,7 +551,7 @@ async function main() {
             // update loss graph
             const lastStep = lossSteps.at(-1) ?? 0;
             lossSteps.push(lastStep + 1);
-            lossPlot.setData([lossSteps, lossData,lossData2]);
+            plot.setData([lossSteps, lossData,lossData2]);
 
             // display on canvas
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
@@ -502,12 +564,16 @@ async function main() {
         lossData = []
         lossData2 = []
         lossSteps = []
-        lossPlot.setData([lossSteps, lossData,lossData2]);
+        plot.setData([lossSteps, lossData,lossData2]);
 
         // reset gauss 1
         input.set([0.5, 0.5], posOff);
         input.set([1.7, 2.0], scaleOff);
         input.set([0.0], rotOff);
+
+        // reset adam memory
+        const adamMemV = new Float32Array(adamMemoryDesc.size);
+        ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
 
         ctx.device.queue.writeBuffer(paramBuffer, 0, input);
         ctx.device.queue.writeBuffer(paramBuffer2, 0, input);
@@ -525,11 +591,6 @@ async function main() {
         ctx.renderPassDescriptor = renderPassDescriptorScreen;
         render(ctx, pipeLineForward, bindGroupTexture, undefined, 6, numSplats);
     }
-
-        
-        const pane = new Pane({
-            container: document.getElementById("gd-sliders-2d") as HTMLElement,
-        });
 
         pane.addBinding(PARAMS, 'showActivation', {
             label: 'red'
@@ -559,4 +620,5 @@ async function main() {
     
 }
 
-main();
+main("gd2dsimple", lossPlot, paneAct, false);
+main("gd2dadam", lossPlotAdam, paneAdam, true);

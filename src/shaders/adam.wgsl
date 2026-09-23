@@ -1,5 +1,3 @@
-const NUM_GAUSS = 2;
-
 struct AdamParams {
     lr: f32,
     b1: f32,
@@ -12,6 +10,35 @@ struct AdamMemory {
     t : u32,
     m : array<Grad, NUM_GAUSS>,
     v : array<Grad, NUM_GAUSS>,
+}
+
+fn adamStepGradGauss(
+    p : AdamParams, 
+    t : f32,
+    momentum : ptr<function, array<GradGauss, NUM_GAUSS>>,
+    variance : ptr<function, array<GradGauss, NUM_GAUSS>>,
+    grad   : ptr<function, array<GradGauss, NUM_GAUSS>>, // by copy for now
+    ) 
+{
+    let alpha_t = p.lr * sqrt((1.0 - pow(p.b2, t)))/(1.0-pow(p.b1, t));
+
+    for(var i = 0; i < NUM_GAUSS; i++) {
+
+        let mPos = &((*momentum)[i].pos);
+        let vPos = &((*variance)[i].pos);
+        let gPos =  &(*grad)[i].pos;
+        adamStepVec2(p, mPos, vPos, gPos, alpha_t);
+
+        let mSca = &(*momentum)[i].scale;
+        let vSca = &(*variance)[i].scale;
+        let gSca =  &(*grad)[i].scale;
+        adamStepVec2(p, mSca, vSca, gSca, alpha_t);
+
+        let mRot = &(*momentum)[i].rot;
+        let vRot = &(*variance)[i].rot;
+        let gRot =  &(*grad)[i].rot;
+        adamStepScalar(p,mRot, vRot, gRot, alpha_t);
+    }   
 }
 
 fn adamStepGrad(

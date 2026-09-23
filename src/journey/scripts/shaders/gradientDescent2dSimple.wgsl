@@ -1,5 +1,7 @@
 struct Unfirom {
+    adamP : AdamParams,
     activationFlag : i32,
+    adamFlag : i32,
 }
 
 @group(0) @binding(0) var ourSampler: sampler;
@@ -7,6 +9,23 @@ struct Unfirom {
 @group(0) @binding(2) var<storage, read_write> output: GaussParams;
 @group(0) @binding(3) var<storage, read_write> lossOutput : f32;
 @group(0) @binding(4) var<uniform> uniforms : Unfirom;
+@group(0) @binding(5) var<storage, read_write> adamMemory : MyAdamMemory;
+
+// only for adam grad
+const NUM_GAUSS = 1;
+struct Grad {  
+    pos: vec2f,
+    scale : vec2f,
+    rot : f32,
+    color : vec3f,
+    alpha: f32,
+};
+struct MyAdamMemory {
+    t : u32,
+    m : array<GradGauss, NUM_GAUSS>,
+    v : array<GradGauss, NUM_GAUSS>,
+}
+
 
 const xRAY = false;
 
@@ -74,12 +93,33 @@ fn GradLoss(
     gradients.pos    /= n;
     gradients.scale  /= n;
     gradients.rot    /= n;
-
     let initalParams = output;
 
-    let newQ = initalParams.pos - 0.01 * gradients.pos;
-    let newS = initalParams.scale - 0.5 * gradients.scale;
-    let newR = initalParams.rot - 0.01 * gradients.rot;
+    var newQ = vec2f(0.0);
+    var newS = vec2f(0.0);
+    var newR = 0.0;
+
+    if(uniforms.adamFlag > 0) {
+        // adam step
+        adamMemory.t += 1u;
+        var moment = adamMemory.m;
+        var varian = adamMemory.v;
+        var gradientAdam = array<GradGauss, NUM_GAUSS>(gradients);
+        // ugly hardcoded adam memory holder        
+        adamStepGradGauss(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradientAdam);
+        adamMemory.m = moment;
+        adamMemory.v = varian;
+
+        newQ = initalParams.pos - gradientAdam[0].pos;
+        newS = initalParams.scale - gradientAdam[0].scale;
+        newR = initalParams.rot; // - gradientAdam[0].rot;
+
+    }
+    else {
+        newQ = initalParams.pos - 0.01 * gradients.pos;
+        newS = initalParams.scale - 0.5 * gradients.scale;
+        newR = initalParams.rot - 0.01 * gradients.rot;
+    }
 
     output = GaussParams(newQ, newS, newR);
 }

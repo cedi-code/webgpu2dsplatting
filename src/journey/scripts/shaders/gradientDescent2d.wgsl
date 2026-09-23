@@ -1,3 +1,8 @@
+// constants
+const NUM_GAUSS = 2;
+const xRAY = false;
+
+
 struct Uniform {
     adamP : AdamParams,
 };
@@ -26,7 +31,6 @@ struct Grad {
     alpha: f32,
 };
 
-const xRAY = false;
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
