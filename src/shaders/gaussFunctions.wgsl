@@ -55,10 +55,9 @@ fn EvalGradGauss(p : GaussParams, x: vec2f) -> GradGauss {
     let sDiag = mat2x2f(exp(2.0 * p.scale).x, 0.0, 0.0, exp(2.0 * p.scale).y);
 
     // \Sigma = R * S^2 * R^T
-    let sigma = R * sDiag * transpose(R);
 
     // -0.5 g * \Sigma  * -2 * (x-q)
-    let gradQ = gauss * (sigma * dist);
+    let gradQ = gauss * (R * sDiag * v);
 
     // -0.5 g * 2 * v^t * s * v 
     let gradS = -1.0 * gauss * v * v * exp(2.0 * p.scale);

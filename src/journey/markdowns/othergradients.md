@@ -7,10 +7,13 @@ For more complex images we will also need to optimize over the other gaussian sp
 
 ### Rotation
 Like in the previous chapter [Transforming Gaussians](), we can define our variance to have following shape:
+
 $$
 \Sigma = RSS^TR^T \quad \quad \Sigma^{-1} = RS^{-2}R^T
 $$
+
 which changes our parameterization to
+
 $$
 R(r) = \begin{bmatrix}
 cos(r) & -sin(r) \\
@@ -22,6 +25,7 @@ sin(r)  & cos(r)
 0  & \sigma(s_y)^2 
 \end{bmatrix} R(t)^T
 $$
+
 where $R(r)$ constructs a rotation matrix, that rotates a 2d vector by $r$-degrees counterclock wise.
 
 Great we would just need to take the gradient of $r$ then and also adapt the gradients of $\mu$ and $s$.
@@ -59,7 +63,8 @@ $$
 
 <details>
   <summary>Show derrivation</summary>
-For ease of notation i will use:
+
+For ease of notation I will use:
 - $R(r) = R$
 -  $S^{-2}(r) = S$
 -  $(x-\mu) = d$.
@@ -111,3 +116,75 @@ v_2
 $$
 
 </details>
+
+We also need to adapt the other gradients $\frac{\partial}{\partial \mu}g$ and $\frac{\partial}{\partial s}g$. Using intermediate variable $v = R^T (x-\mu)$ is quite straight forward:
+
+
+<details>
+  <summary>Show updated derrivations</summary>
+
+$$
+\frac{\partial}{\partial \mu}g(x) = g(x) R\begin{bmatrix} 
+\sigma(s_x)^2 & 0 \\
+0 & \sigma(s_y)^2
+\end{bmatrix} v
+$$
+
+and
+
+$$
+\frac{\partial}{\partial s}g(x) = -g(x) v \circ v \circ  \begin{bmatrix}
+\sigma(s_x)^2  \\
+\sigma(s_y)^2 
+\end{bmatrix} 
+$$
+
+</details>
+
+
+<details>
+  <summary>Show updated shader</summary>
+
+```wgsl
+
+struct GaussParams {
+    pos : vec2f,
+    scale : vec2f,
+    rot : f32, // [!code ++]
+};
+
+fn gGrad(x :vec2f, p : Params) -> GaussParams {
+
+    let gauss = g(x,p);
+
+    let d = (x - p.pos); // [!code ++]
+    let R = rotMat(p.rot); // [!code ++]
+    let v = transpose(R)*dist; // [!code ++]
+    let sInv = mat2x2f(exp(2.0 * p.scale).x, 0.0, 0.0, exp(2.0 * p.scale).y);  // [!code ++]
+
+    let gradQ = gauss * p.scale * p.scale * (x - p.pos); // [!code --]
+    let gradQ = gauss * R * sInv * v; // [!code ++]
+
+    let gradS = -1.0 * gauss * (x - p.pos) * (x - p.pos) * exp(2.0*p.scale) // [!code --]
+    let gradS = -1.0 * gauss * v * v * exp(2.0*p.scale) // [!code ++]
+
+    let gradR = -1.0 * gauss * v.x * v.y * (exp(2.0 * p.scale.x) - exp(2.0 * p.scale.y)); // [!code ++]
+
+
+    return GaussParams(gradQ, gradS, gradR);   
+}
+```
+
+</details>
+
+
+
+To make sure we made no mistakes during our derrivations and implementations of the gradients in our shader, we could compare our analyitcal solution we found with a numerical approximation. for that we can use the definition of a definition of the differentation and take a small enough $h$ for step:
+
+$$
+\frac{\partial}{\partial s}g(x;r) \approx \frac{g(x; r + h) - g(x;r)}{h}
+$$
+
+we can calulate this value for some input $x_i \in \R^2$ and compare it with our implementation. Well its actually a bit more difficult than that, so if you are intressted in testing our gradients, one can read the article: [Gradient Checking](https://cedi-code.github.io/webgpu2dsplatting/test.html) ! where I check the gradients we just implemented and compare them to the numerical approximation.
+
+### Color and Alpha Gradients
