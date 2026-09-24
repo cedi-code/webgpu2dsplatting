@@ -230,12 +230,54 @@ it gets a little more compliated when we introduce multiple gaussian splats to t
 Our output image is defined as follows with *alpha blending*:
 
 $$
-\begin{align*}
 
-\^I_G(x) &= \alpha_k S_G(x) + (1-\alpha_G)\^I_{G-1} \\
-&= \sum^{G}_{k=1} \alpha_kS_k(x) \prod^{G}_{l=k+1}(1-\alpha_l)
+\^I_G(x) = \alpha_k S_G(x) + (1-\alpha_G)\^I_{G-1} \\
+
+$$
+
+where $G$ = #splats and $S_k$ is the k-th splat where k=G is most frontal splat and k=1 is the splat all the way in the back.
+expanding the term one can maybe catch a pattern...
+
+$$
+\begin{align*}
+\^I_G(x) &= \alpha_G S_G(x) + (1-\alpha_G)[\alpha_{G-1} S_{G-1}(x) + (1-\alpha_{G-1})\^I_{G-2} ]\\
+ &= \alpha_k S_G(x) + \alpha_{G-1} S_{G-1}(x) (1-\alpha_{G}) + \^I_{G-2} (1-\alpha_{G})(1-\alpha_{G-1}) \\
 
 \end{align*}
 $$
 
-where $G$ = #splats and $S_k$ is the k-th splat where k=G is most frontal splat and k=1 is the splat all the way in the back.
+generalizes to:
+
+$$
+\^I_G(x) = \sum^{G}_{k=1} \alpha_kS_k(x) \prod^{G}_{l=k+1}(1-\alpha_l)
+$$
+
+cool, for color derrivative not a lot changes:
+
+
+
+<details>
+  <summary>Show derriatives</summary>
+
+Lets say for a specific splat $k$ that has color $C_k$ the gradient is:
+
+$$
+\nabla_{C_k} \^I(x) = \alpha_k g_k(x)  \prod^{G}_{l=k+1}(1-\alpha_l)  \begin{bmatrix}
+1 \\
+1 \\
+1 \\
+\end{bmatrix}
+$$
+
+and for splat $k$ , the alpha $\alpha_k$ we get:
+
+$$
+\begin{align*}
+\nabla_{\alpha_k} \^I(x) &=  S_k(x) [\prod^{G}_{l=k+1}(1-\alpha_l)] - \sum^{k-1}_{j=1}\alpha_j S_j(x) \frac{1}{1-\alpha_k}[\prod^{G}_{l=j+1}(1-\alpha_l)]  \\
+&= S_k(x) [\prod^{G}_{l=k+1}(1-\alpha_l)] - \^I_{k-1}(x)[\prod^{G}_{l=k+1}(1-\alpha_l)] \\
+&= (S_k(x) - \^I_{k-1})\prod^{G}_{l=k+1}(1-\alpha_l)
+
+\end{align*}
+$$
+
+</details>
