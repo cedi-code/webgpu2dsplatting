@@ -189,7 +189,7 @@ for this example use this texture for our $y^* = I^*$:
 
 <img src="assets/testImage.jpg" width="200" height="200">
 
-This means we want our gaussian paramers $g(x;\mu, s)$ to approximate the shape in the image above. For that we need to be able to read its info and loss function changes to:
+This means we want our gaussian paramers $g(x;\mu, s)$ to approximate the luminance (white intensity) in the image above. For that we need to be able to read its info and loss function changes to:
 
 $$
 L(\mu, s) = \frac{1}{M}||g(\mu, s)- I^*||_F^2

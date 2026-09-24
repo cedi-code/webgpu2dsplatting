@@ -188,3 +188,54 @@ $$
 we can calulate this value for some input $x_i \in \R^2$ and compare it with our implementation. Well its actually a bit more difficult than that, so if you are intressted in testing our gradients, one can read the article: [Gradient Checking](https://cedi-code.github.io/webgpu2dsplatting/test.html) ! where I check the gradients we just implemented and compare them to the numerical approximation.
 
 ### Color and Alpha Gradients
+
+Previously our color used to just be the luminance (scalar value), which in our case is just $g(x)$. but for color this is a 3d vector. A Red, green and blue channel. Each gaussian has itself assigned a unique color and a alpha value since we are not doing spherical harmonics this makes it quite ez. I will define our output image as:
+
+$$
+\^I(x) = \alpha S(x) = \alpha C g(x) 
+$$
+
+$$
+C = \begin{bmatrix}
+c_r \\
+c_g \\
+c_b \\
+\end{bmatrix} \quad \quad S(x) = Cg(x)
+$$
+
+$g(x)$ just says how intensive that color is. Looking at our loss function and assuming just a single gaussian we have something like this:
+
+$$
+L(\mu, s, r, c) = \frac{1}{(N+1)^2}\sum_{i=0}^{N}\sum_{j=0}^{N}(\^{I}(x)- I^*)^2
+$$
+
+so the derrivative $\nabla_C L$ is quite trivial since we have a constant:
+
+$$
+\nabla_c L= \frac{1}{(N+1)^2}\sum_{i=0}^{N}\sum_{j=0}^{N}(\^{I}(x)- I^*) \circ \begin{bmatrix}
+1 \\
+1 \\
+1 \\
+\end{bmatrix}\alpha g(x_{ij})
+$$
+
+For alpha it would be similarly easy since the alpha is just a scalar value. 
+
+$$
+\nabla_{\alpha} L= \frac{1}{(N+1)^2}\sum_{i=0}^{N}\sum_{j=0}^{N}(\^{I}(x)- I^*) ^TS(x_{ij})
+$$
+
+it gets a little more compliated when we introduce multiple gaussian splats to the mix, since then we have to start *alpha blending* where order matters!
+
+Our output image is defined as follows with *alpha blending*:
+
+$$
+\begin{align*}
+
+\^I_G(x) &= \alpha_k S_G(x) + (1-\alpha_G)\^I_{G-1} \\
+&= \sum^{G}_{k=1} \alpha_kS_k(x) \prod^{G}_{l=k+1}(1-\alpha_l)
+
+\end{align*}
+$$
+
+where $G$ = #splats and $S_k$ is the k-th splat where k=G is most frontal splat and k=1 is the splat all the way in the back.
