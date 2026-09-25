@@ -281,3 +281,108 @@ $$
 $$
 
 </details>
+
+For the implementation we need to calculate two variables before we can evaluate the gradients for each gaussian $\alpha_k S_k$.
+
+- accumulated $(1-\alpha)$ values
+
+$$
+(1-a)_{k} = \prod^{G}_{l=k+1}(1-\alpha_l)
+$$
+
+- the intermediate images (result after renderin up to k-gaussians in order!)
+
+$$
+\^I_{k} = \sum^{k}_{j=1} \alpha_j S_j(x) (1-a)_k
+$$
+
+
+
+Naive way to implement this is to calculate $\prod^{G}_{l=k+1}(1-\alpha_l)$ for each $\^I_k$  like this (pseudo code):
+
+```wgsl
+// == looping throu image coords ===
+for (var i = 0; i < width; i++) {
+  for (var j = 0; j < height; j++) {
+    ...
+    var I_k = vec3f(0.0); // black background
+    for(var k = 0; k < nGauss; k++) {
+      // === setup ===
+      let gauss : f32   = g(x,p[k]);
+      let color : vec3f = p[k].color;
+
+      let S_k : vec3f   = color * gauss;
+      let alpha_k : f32 = p[k].alpha;
+
+      // === prod (1-a) ===
+      var alphaMinus1 = 1.0;
+      for(var l = k+1; l < nGauss; l++) {
+        alphaMinus1 *= (1.0 - p[l].alpha);
+      }
+
+      // === img result at gaussian k ===
+      I_k += alpha_k * S_k * alphaMinus1;
+
+      // calculate gradients
+      GradGauss(...);
+    }
+
+// looping again throu all gaussians and multiplying gradients by (I* - I_k), L2 loss term.
+...
+  }
+}
+```
+
+this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first looping throu all  $(1-\alpha_k)$ and store the intermediate results in a array only needing to loop throu twice all the gaussians. (but making the storage goes from $O(1)$ to $O(n)$) which is a trade offer we are taking for now :
+
+```wgsl
+...
+      // === prod (1-a) === // [!code ++]
+    var alphaMinus1 = array<f32, nGauss>(); // [!code ++]
+    alphaMinus1[nGauss-1] = 1.0; // [!code ++]
+    for(var l = nGauss-1; l >= 1; l--) { // [!code ++]
+      alphaMinus1[l-1] = (1.0 - p[l].alpha) * alphaMinus1[l]; // [!code ++]
+    } // [!code ++]
+
+    var I_k = vec3f(0.0); // black background
+    for(var k = 0; k < nGauss; k++) {
+      // === setup ===
+      let gauss : f32   = g(x,p[k]);
+      let color : vec3f = p[k].color;
+
+      let S_k : vec3f   = color * gauss;
+      let alpha_k : f32 = p[k].alpha;
+
+      // === prod (1-a) === // [!code --]
+      var alphaMinus1 = 1.0; // [!code --]
+      for(var l = k+1; l < nGauss; l++) { // [!code --]
+        alphaMinus1 *= (1.0 - p[l].alpha); // [!code --]
+      } // [!code --]
+
+      // === img result at gaussian k ===
+      I_k += alpha_k * S_k * alphaMinus1; // [!code --]
+      I_k += alpha_k * S_k * alphaMinus1[k]; // [!code ++]
+
+      // calculate gradients
+      GradGauss(...);
+    }
+    ...
+``` 
+
+##### *next chapter there will be a even cleaner solution! runtime $O(n)$ and storage $O(1)$*
+
+// todo explain activation function for color!
+
+// todo show gradient in code for color and alpha
+<details>
+  <summary>Show shader code gradient calculation</summary>
+
+    ...
+    let gradColor += alpha * gauss * alphaMinus1_k * vec3f(1.0) * dSigmoidColor;
+
+    // alpha gradient  
+    let gradAlpha =  (gauss - I_k) * alphaMinus1_k * dSigmoidAlpha;
+
+</details>
+
+// todo have code playground be displayed after this (such that one can initalize color and alpha and pos and rot and scale? (thats a lot...))
