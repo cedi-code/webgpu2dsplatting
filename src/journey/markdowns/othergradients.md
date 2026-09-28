@@ -282,7 +282,20 @@ $$
 
 </details>
 
-For the implementation we need to calculate two variables before we can evaluate the gradients for each gaussian $\alpha_k S_k$.
+Color in graphics ranges from [0,1] so it would be nice that when updating our color value in gd, it stays in that range. same for transparency. thats why we will use the sigmoid activation function for color and alpha:
+
+$$
+\sigma(\alpha) = \frac{1}{1+e^{-x}}
+$$
+
+
+
+<img src="https://raw.githubusercontent.com/Codecademy/docs/main/media/sigmoid-function.png" width=300 />
+
+which means negative values are more darker colors (-4 basically black) and positive are more lighter colors (+4 is white).
+
+
+For the implementation we need also to calculate two variables before we can evaluate the gradients for each gaussian $\alpha_k S_k$.
 
 - accumulated $(1-\alpha)$ values
 
@@ -297,8 +310,22 @@ $$
 $$
 
 
+assuming we have $(1-a)_k$ and $\^I_{k}$ one can evaluate the gradients for color and alpha as follows:
 
-Naive way to implement this is to calculate $\prod^{G}_{l=k+1}(1-\alpha_l)$ for each $\^I_k$  like this (pseudo code):
+<details>
+  <summary>Show shader code gradient calculation</summary>
+
+    ...
+    let gradColor += alpha * gauss * alphaMinus1_k * vec3f(1.0) * dSigmoidColor;
+
+    // alpha gradient  
+    let gradAlpha =  (gauss - I_k) * alphaMinus1_k * dSigmoidAlpha;
+
+</details>
+
+
+
+to calculate $(1-a)_k$ and $\^I_{k}$ before hand a naive way to do this is to evaluate $\prod^{G}_{l=k+1}(1-\alpha_l)$ for each $\^I_k$  like this (pseudo code):
 
 ```wgsl
 // == looping throu image coords ===
@@ -369,20 +396,7 @@ this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first l
     ...
 ``` 
 
-##### *next chapter there will be a even cleaner solution! runtime $O(n)$ and storage $O(1)$*
+##### *next chapter there will be a even cleaner solution! runtime\* $O(n)$ and storage $O(1)$*
 
-// todo explain activation function for color!
 
-// todo show gradient in code for color and alpha
-<details>
-  <summary>Show shader code gradient calculation</summary>
-
-    ...
-    let gradColor += alpha * gauss * alphaMinus1_k * vec3f(1.0) * dSigmoidColor;
-
-    // alpha gradient  
-    let gradAlpha =  (gauss - I_k) * alphaMinus1_k * dSigmoidAlpha;
-
-</details>
-
-// todo have code playground be displayed after this (such that one can initalize color and alpha and pos and rot and scale? (thats a lot...))
+Now in this demo we can have 2 gaussians that try to approximate 2 shapes with different colors that overlapp eachother:
