@@ -400,3 +400,5 @@ this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first l
 
 
 Now in this demo we can have 2 gaussians that try to approximate 2 shapes with different colors that overlapp eachother:
+
+<img src="assets/overlappImage.jpg" style="transform: scaleY(-1);" width=250 />
