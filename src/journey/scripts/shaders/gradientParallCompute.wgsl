@@ -2,11 +2,8 @@
 const NUM_GAUSS = 2;
 const xRAY = false;
 const nGauss = 2;
+const sampleDim = 128;
 
-
-struct Uniform {
-    adamP : AdamParams,
-};
 
 struct Params {
     pos : vec2f,
@@ -17,24 +14,19 @@ struct Params {
 };
 
 struct Grad {  
-    pos: vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
+    pos: atomic<vec2f>,
+    scale : atomic<vec2f>,
+    rot : atomic<f32>,
+    color : atomic<vec3f>,
+    alpha: atomic<f32>,
 };
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
-@group(0) @binding(3) var<uniform> uniforms : Uniform;
-@group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
-@group(0) @binding(5) var<storage, read_write> adamMemory : AdamMemory;
-@group(0) @binding(6) var forwardTexture : texture_2d<f32>; 
-@group(0) @binding(7) var gradients : array<Grad, nGauss>; 
-
-
-
+@group(0) @binding(3) var<storage, read_write> lossOutput : array<f32>;
+@group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
+@group(0) @binding(5) var gradients : array<Grad, nGauss>; 
 
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
@@ -68,20 +60,20 @@ fn GradLoss(
 
     let gradGauss = EvalGradGauss(gaussP, x);    
 
-    (*grad)[i].pos   += gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY);
-    (*grad)[i].scale += gradGauss.scale * select((dAlphaBlend), 1.0, xRAY);
-    (*grad)[i].rot   += gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY);
+    atomicAdd(&(*grad)[i].pos,    gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY));
+    atomicAdd(&(*grad)[i].scale,  gradGauss.scale * select((dAlphaBlend), 1.0, xRAY));
+    atomicAdd(&(*grad)[i].rot,    gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY));
 
     // color gradient
 
-    (*grad)[i].color += alpha * gauss * select((*oneMinusAlpha), 1.0, xRAY) * vec3f(
+    atomicAdd(&(*grad)[i].color, alpha * gauss * select((*oneMinusAlpha), 1.0, xRAY) * vec3f(
         colorDiff.r * dSigmoid(p.color.r, 4.0),
         colorDiff.g * dSigmoid(p.color.g, 4.0),
         colorDiff.b * dSigmoid(p.color.b, 4.0),
-    );
+    ));
 
     // alpha gradient  
-    (*grad)[i].alpha += colorDiffDot * gauss * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0);
+    atomicAdd(&(*grad)[i].alpha, colorDiffDot * gauss * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0));
 
     (*oneMinusAlpha) *= (1.0 - alpha * gauss);
 }
@@ -91,7 +83,7 @@ fn GradLoss(
 fn computeGD(@builtin(global_invocation_id) global_invocation_id : vec3u) {
 
     // loss + backwards pass
-    let sizeSample = vec2f(128, 128);
+    let sizeSample = vec2f(sampleDim);
     let uv = global_invocation_id.xy / sizeSample;
     let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
     let colorPreMult = vec4f(color.rgb * color.a, color.a);
@@ -112,39 +104,4 @@ fn computeGD(@builtin(global_invocation_id) global_invocation_id : vec3u) {
         // params
         GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha, &gradients);                     
     }
-
-    // TODO somehow need a barrier here
-
-    let n = f32(sizeSample.y * sizeSample.x);
-    for(var i = 0; i < nGauss; i++) {
-        
-        gradients[i].pos    /= n;
-        gradients[i].scale  /= n;
-        gradients[i].rot    /= n;
-        gradients[i].color  /= n;
-        gradients[i].alpha  /= n;
-
-    }
-
-    // adam step
-        adamMemory.t += 1u;
-        var moment = adamMemory.m;
-        var varian = adamMemory.v;
-
-        adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradients);
-        adamMemory.m = moment;
-        adamMemory.v = varian;
-
-        for(var i = 0; i < nGauss; i++) {
-
-            let initalParams = output[i];
-
-            let newQ = initalParams.pos - gradients[i].pos;
-            let newS = initalParams.scale - gradients[i].scale;
-            let newR = initalParams.rot - gradients[i].rot;
-            let newC = initalParams.color - gradients[i].color;
-            let newA = initalParams.alpha - gradients[i].alpha;
-
-            output[i] = Params(newQ, newS, newR, newC, newA);
-        }
-    }
+}

@@ -324,6 +324,8 @@ async function main() {
     gradDesc.label = 'gradient buffer';
     const gradientBuffer = bufferManager.createBuffer(paramDesc);
 
+    ctx.device.queue.writeBuffer(gradientBuffer, 0, new Float32Array(gradDesc.size));
+
     // loss result buffer
     const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
     const lossV = new Float32Array(lossBuffDesc.size);
@@ -392,6 +394,7 @@ async function main() {
             { binding: 4, resource: lossBuffer },
             { binding: 5, resource: adamMemBuffer},
             { binding: 6, resource: textureForward },
+            { binding: 7, resource: gradientBuffer },
         ]
     });
 
