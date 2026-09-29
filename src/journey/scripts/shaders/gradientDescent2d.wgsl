@@ -40,10 +40,6 @@ fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     ) / 3.0;;
 }
 
-fn Luminance(color : vec3f) -> f32 {
-    return (color.r + color.g + color.b) / 3.0;
-}
-
 fn GradLoss(
     param : ptr<storage, array<Params>, read_write>, // should not be read_write!
     i : i32, 
@@ -57,21 +53,19 @@ fn GradLoss(
     let gaussP = GaussParams(p.pos, p.scale, p.rot);
     let gauss = g(gaussP,x);
 
-
-    // let diff = ((gColor.r - imgC.r) + (gColor.g - imgC.g) + (gColor.b - imgC.b)) / 3.0;
-    let dLoss = Luminance(colorDiff);
+    let colorDiffDot = dot(colorDiff, vecSigmoid(p.color) - (*background));
     let alpha = sigmoid(p.alpha, 4.0);
 
     (*background) -= alpha * gauss * vecSigmoid(p.color);
     (*background) /= (1.0 - alpha * gauss + uniforms.adamP.eps);  
 
-    let dAlphaBlend = alpha * Luminance(vecSigmoid(p.color) - (*background));
+    let dAlphaBlend = alpha * (*oneMinusAlpha) * colorDiffDot;
 
     let gradGauss = EvalGradGauss(gaussP, x);    
 
-    (*grad)[i].pos   += dLoss * gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY);
-    (*grad)[i].scale += dLoss * gradGauss.scale * select((dAlphaBlend), 1.0, xRAY);
-    (*grad)[i].rot   += dLoss * gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY);
+    (*grad)[i].pos   += gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY);
+    (*grad)[i].scale += gradGauss.scale * select((dAlphaBlend), 1.0, xRAY);
+    (*grad)[i].rot   += gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY);
 
     // color gradient
 
@@ -82,7 +76,7 @@ fn GradLoss(
     );
 
     // alpha gradient  
-    (*grad)[i].alpha += dLoss * (gauss - Luminance((*background))) * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0);
+    (*grad)[i].alpha += colorDiffDot * gauss * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0);
 
     (*oneMinusAlpha) *= (1.0 - alpha * gauss);
 }
@@ -111,7 +105,7 @@ fn GradLoss(
 
             currLoss += Loss(gColor, color);
    
-            let colorGrad = 2.0 * vec3f(
+            let colorGrad = vec3f(
                 (gColor.r - colorPreMult.r),
                 (gColor.g - colorPreMult.g),
                 (gColor.b - colorPreMult.b),

@@ -192,7 +192,7 @@ we can calulate this value for some input $x_i \in \R^2$ and compare it with our
 Previously our color used to just be the luminance (scalar value), which in our case is just $g(x)$. but for color this is a 3d vector. A Red, green and blue channel. Each gaussian has itself assigned a unique color and a alpha value since we are not doing spherical harmonics this makes it quite ez. I will define our output image as:
 
 $$
-\^I(x) = \alpha S(x) = \alpha C g(x) 
+\^I(x) = a(x)C = \alpha g(x) C 
 $$
 
 $$
@@ -200,7 +200,7 @@ C = \begin{bmatrix}
 c_r \\
 c_g \\
 c_b \\
-\end{bmatrix} \quad \quad S(x) = Cg(x)
+\end{bmatrix} \quad \quad a(x) = \alpha g(x)
 $$
 
 $g(x)$ just says how intensive that color is. Looking at our loss function and assuming just a single gaussian we have something like this:
@@ -216,13 +216,13 @@ $$
 1 \\
 1 \\
 1 \\
-\end{bmatrix}\alpha g(x_{ij})
+\end{bmatrix}a(x_{ij})
 $$
 
 For alpha it would be similarly easy since the alpha is just a scalar value. 
 
 $$
-\nabla_{\alpha} L= \frac{1}{(N+1)^2}\sum_{i=0}^{N}\sum_{j=0}^{N}(\^{I}(x)- I^*) ^TS(x_{ij})
+\nabla_{\alpha} L= \frac{1}{(N+1)^2}\sum_{i=0}^{N}\sum_{j=0}^{N}(\^{I}(x)- I^*) ^Tg(x_{ij})C
 $$
 
 it gets a little more compliated when we introduce multiple gaussian splats to the mix, since then we have to start *alpha blending* where order matters!
@@ -231,17 +231,17 @@ Our output image is defined as follows with *alpha blending*:
 
 $$
 
-\^I_G(x) = \alpha_k S_G(x) + (1-\alpha_G)\^I_{G-1} \\
+\^I_G(x) = a_k(x)C_k + (1-a_k(x))\^I_{G-1} \\
 
 $$
 
-where $G$ = #splats and $S_k$ is the k-th splat where k=G is most frontal splat and k=1 is the splat all the way in the back.
+where $G$ = #splats and $a_k$ is the k-th splat where k=G is most frontal splat and k=1 is the splat all the way in the back.
 expanding the term one can maybe catch a pattern...
 
 $$
 \begin{align*}
-\^I_G(x) &= \alpha_G S_G(x) + (1-\alpha_G)[\alpha_{G-1} S_{G-1}(x) + (1-\alpha_{G-1})\^I_{G-2} ]\\
- &= \alpha_k S_G(x) + \alpha_{G-1} S_{G-1}(x) (1-\alpha_{G}) + \^I_{G-2} (1-\alpha_{G})(1-\alpha_{G-1}) \\
+\^I_G(x) &= a_G C_G + (1-a_G)[a_{G-1} C_{G-1} + (1-a_{G-1})\^I_{G-2} ]\\
+ &= a_k C_G + a_{G-1} C_{G-1} (1-a_{G}) + \^I_{G-2} (1-a_{G})(1-a_{G-1}) \\
 
 \end{align*}
 $$
@@ -249,7 +249,7 @@ $$
 generalizes to:
 
 $$
-\^I_G(x) = \sum^{G}_{k=1} \alpha_kS_k(x) \prod^{G}_{l=k+1}(1-\alpha_l)
+\^I_G(x) = \sum^{G}_{k=1} a_kC_k \prod^{G}_{l=k+1}(1-a_l(x))
 $$
 
 cool, for color derrivative not a lot changes:
@@ -262,20 +262,20 @@ cool, for color derrivative not a lot changes:
 Lets say for a specific splat $k$ that has color $C_k$ the gradient is:
 
 $$
-\nabla_{C_k} \^I(x) = \alpha_k g_k(x)  \prod^{G}_{l=k+1}(1-\alpha_l)  \begin{bmatrix}
+\nabla_{C_k} \^I(x) = a_k g_k(x)  \prod^{G}_{l=k+1}(1-a_l(x))  \begin{bmatrix}
 1 \\
 1 \\
 1 \\
 \end{bmatrix}
 $$
 
-and for splat $k$ , the alpha $\alpha_k$ we get:
+and for splat $k$ , the alpha $a_k$ we get:
 
 $$
 \begin{align*}
-\nabla_{\alpha_k} \^I(x) &=  S_k(x) [\prod^{G}_{l=k+1}(1-\alpha_l)] - \sum^{k-1}_{j=1}\alpha_j S_j(x) \frac{1}{1-\alpha_k}[\prod^{G}_{l=j+1}(1-\alpha_l)]  \\
-&= S_k(x) [\prod^{G}_{l=k+1}(1-\alpha_l)] - \^I_{k-1}(x)[\prod^{G}_{l=k+1}(1-\alpha_l)] \\
-&= (S_k(x) - \^I_{k-1})\prod^{G}_{l=k+1}(1-\alpha_l)
+\nabla_{a_k} \^I(x) &=  C_k [\prod^{G}_{l=k+1}(1-a_l(x))] - \sum^{k-1}_{j=1}a_j C_j(x) \frac{1}{1-a_k}[\prod^{G}_{l=j+1}(1-a_l(x))]  \\
+&= C_k [\prod^{G}_{l=k+1}(1-a_l(x))] - \^I_{k-1}(x)[\prod^{G}_{l=k+1}(1-a_l(x))] \\
+&= (C_k - \^I_{k-1})\prod^{G}_{l=k+1}(1-a_l(x))
 
 \end{align*}
 $$
@@ -295,18 +295,18 @@ $$
 which means negative values are more darker colors (-4 basically black) and positive are more lighter colors (+4 is white).
 
 
-For the implementation we need also to calculate two variables before we can evaluate the gradients for each gaussian $\alpha_k S_k$.
+For the implementation we need also to calculate two variables before we can evaluate the gradients for each gaussian $a_k C_k$.
 
 - accumulated $(1-\alpha)$ values
 
 $$
-(1-a)_{k} = \prod^{G}_{l=k+1}(1-\alpha_l)
+(1-a)_{k} = \prod^{G}_{l=k+1}(1-a_l(x))
 $$
 
 - the intermediate images (result after renderin up to k-gaussians in order!)
 
 $$
-\^I_{k} = \sum^{k}_{j=1} \alpha_j S_j(x) (1-a)_k
+\^I_{k} = \sum^{k}_{j=1} a_j(x) C_j (1-a)_k
 $$
 
 
@@ -315,17 +315,19 @@ assuming we have $(1-a)_k$ and $\^I_{k}$ one can evaluate the gradients for colo
 <details>
   <summary>Show shader code gradient calculation</summary>
 
+```wgsl
     ...
     let gradColor += alpha * gauss * alphaMinus1_k * vec3f(1.0) * dSigmoidColor;
 
     // alpha gradient  
-    let gradAlpha =  (gauss - I_k) * alphaMinus1_k * dSigmoidAlpha;
+    let gradAlpha =  (C - I_k) * alphaMinus1_k * dSigmoidAlpha;
+```
 
 </details>
 
 
 
-to calculate $(1-a)_k$ and $\^I_{k}$ before hand a naive way to do this is to evaluate $\prod^{G}_{l=k+1}(1-\alpha_l)$ for each $\^I_k$  like this (pseudo code):
+to calculate $(1-a)_k$ and $\^I_{k}$ before hand a naive way to do this is to evaluate $\prod^{G}_{l=k+1}(1-a_l(x))$ for each $\^I_k$  like this (pseudo code):
 
 ```wgsl
 // == looping throu image coords ===
@@ -338,17 +340,17 @@ for (var i = 0; i < width; i++) {
       let gauss : f32   = g(x,p[k]);
       let color : vec3f = p[k].color;
 
-      let S_k : vec3f   = color * gauss;
-      let alpha_k : f32 = p[k].alpha;
+      let C_k : vec3f   = color;
+      let alpha_k : f32 = p[k].alpha * gauss;
 
       // === prod (1-a) ===
       var alphaMinus1 = 1.0;
       for(var l = k+1; l < nGauss; l++) {
-        alphaMinus1 *= (1.0 - p[l].alpha);
+        alphaMinus1 *= (1.0 - p[l].alpha * g(x,p[l]));
       }
 
       // === img result at gaussian k ===
-      I_k += alpha_k * S_k * alphaMinus1;
+      I_k += alpha_k * C_k * alphaMinus1;
 
       // calculate gradients
       GradGauss(...);
@@ -360,7 +362,7 @@ for (var i = 0; i < width; i++) {
 }
 ```
 
-this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first looping throu all  $(1-\alpha_k)$ and store the intermediate results in a array only needing to loop throu twice all the gaussians. (but making the storage goes from $O(1)$ to $O(n)$) which is a trade offer we are taking for now :
+this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first looping throu all  $(1-a_k)$ and store the intermediate results in a array only needing to loop throu twice all the gaussians. (but making the storage goes from $O(1)$ to $O(n)$) which is a trade offer we are taking for now :
 
 ```wgsl
 ...
@@ -368,7 +370,7 @@ this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first l
     var alphaMinus1 = array<f32, nGauss>(); // [!code ++]
     alphaMinus1[nGauss-1] = 1.0; // [!code ++]
     for(var l = nGauss-1; l >= 1; l--) { // [!code ++]
-      alphaMinus1[l-1] = (1.0 - p[l].alpha) * alphaMinus1[l]; // [!code ++]
+      alphaMinus1[l-1] = (1.0 - p[l].alpha * g(x,p[l])) * alphaMinus1[l]; // [!code ++]
     } // [!code ++]
 
     var I_k = vec3f(0.0); // black background
@@ -377,18 +379,18 @@ this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first l
       let gauss : f32   = g(x,p[k]);
       let color : vec3f = p[k].color;
 
-      let S_k : vec3f   = color * gauss;
-      let alpha_k : f32 = p[k].alpha;
+      let C_k : vec3f   = color;
+      let alpha_k : f32 = p[k].alpha * gauss;
 
       // === prod (1-a) === // [!code --]
       var alphaMinus1 = 1.0; // [!code --]
       for(var l = k+1; l < nGauss; l++) { // [!code --]
-        alphaMinus1 *= (1.0 - p[l].alpha); // [!code --]
+        alphaMinus1 *= (1.0 - p[l].alpha * g(x,p[l])); // [!code --]
       } // [!code --]
 
       // === img result at gaussian k ===
-      I_k += alpha_k * S_k * alphaMinus1; // [!code --]
-      I_k += alpha_k * S_k * alphaMinus1[k]; // [!code ++]
+      I_k += alpha_k * C_k * alphaMinus1; // [!code --]
+      I_k += alpha_k * C_k * alphaMinus1[k]; // [!code ++]
 
       // calculate gradients
       GradGauss(...);

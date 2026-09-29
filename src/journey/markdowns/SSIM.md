@@ -99,6 +99,7 @@ Todo this we need the following:
 So first "execute the forward step pipeline". 
 we will not use the instance buffer, since this we can read the param buffer directly.
 changes in `gaussTileVert.wgsl`
+
 ```wgsl
 ...
 
@@ -195,11 +196,73 @@ and read it in our compute shader:
     ...
     for (var y = 0u; y < size.y; y++) {
         for (var x = 0u; x < size.x; x++) {
-            let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);  // [!code ++]
-
+            let fRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);  // [!code ++]
+            var I_final = vec4f(vec3f(fRaw.rgb) * fRaw.a, fRaw.a); // [!code ++]
             ...
 
         }
     }
 ``` 
 
+since we now already have the final output $I_G$ we require only one loop instead of two, by simply subtracting the current gaussian from the final image in reverse order we can get $I_k$.
+
+$$
+\^I_{G}(x) = a_k(x) C + (1 - a_k(x))\^I_{G-1}(x) \implies \^I_{G-1}(x) \approx \frac{\^I_{G}(x) - a_k(x)) C_G}{(1 - a_k(x) + \epsilon)}
+$$
+
+which changes our shader code to:
+
+```wgsl
+...
+    var I_final = vec4f(vec3f(fRaw.rgb) * fRaw.a, fRaw.a);
+
+    var alphaMinus1 = array<f32, nGauss>(); // [!code --]
+    var alphaMinus1 = 1.0;
+    for(var l = nGauss-1; l >= 1; l--) { 
+      
+
+      // === setup ===
+      let gauss : f32   = g(x,p[l]);
+      let color : vec3f = p[l].color;
+
+      let C_l : vec3f   = color;
+      let alpha_l : f32 = p[l].alpha * gauss;
+
+      // === prod (1-a) === 
+      alphaMinus1 = (1.0 - alpha_l) * alphaMinus1;
+
+      // === img result at gaussian k === 
+      I_final -= alpha_l * color; // [!code ++]
+      I_final /= 1.0 - alpha_l + eps; // [!code ++]
+
+      // calculate gradients
+      GradGauss(...);
+
+    }
+
+    var I_k = vec3f(0.0); // black background // [!code --]
+    for(var k = 0; k < nGauss; k++) { // [!code --]
+
+      ...
+      I_k += alpha_k * S_k * alphaMinus1[k]; // [!code --]
+      ...
+
+    } // [!code --]
+    ...
+``` 
+which as promised before is $O(n)$ and storage $O(1)$ if one excludes the forward pass!
+
+### SSIM-gradient
+i am actually too lazy to compute the gradient of the SSIM, so for now I will skip this loss and only use the L1 loss. which will lead to the gaussians approximating the images a bit blurry, but thats ok for now.
+
+<img src="https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/Bradypus.jpg/500px-Bradypus.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail&_=20190812051248" width=300 />
+
+which just leaves us with replacing the L2 loss with a L1 loss where we just need to replace
+
+$$
+\nabla_I L =  2(\^I(x) - I^*) \implies \nabla_I L = sign(\^I(x) - I^*)
+$$
+
+applying this loss actually makes our performance worse in our usecase...the L1 error weighs the color error equally which with our priors that are very off (mostly behind black color). so the direction to go towards color or to go out of the screen is equal. in L2 this is not the case since there having matching colors is weightes more strongly, tending to move more towards that color. So for now we will keep the L2 loss.
+
+Next the current implementation only works for a couple gaussians until we get the same performance issues. there is a lot we can do that will be coverd in the next section!
