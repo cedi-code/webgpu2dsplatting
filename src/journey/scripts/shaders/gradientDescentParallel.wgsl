@@ -1,6 +1,7 @@
 // constants
 const NUM_GAUSS = 2;
 const xRAY = false;
+const nGauss = 2;
 
 
 struct Uniform {
@@ -15,14 +16,6 @@ struct Params {
     alpha: f32,
 };
 
-@group(0) @binding(0) var<storage, read_write> output: array<Params>;
-@group(0) @binding(1) var ourSampler: sampler;
-@group(0) @binding(2) var goalTexture: texture_2d<f32>;
-@group(0) @binding(3) var<uniform> uniforms : Uniform;
-@group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
-@group(0) @binding(5) var<storage, read_write> adamMemory : AdamMemory;
-@group(0) @binding(6) var forwardTexture : texture_2d<f32>; 
-
 struct Grad {  
     pos: vec2f,
     scale : vec2f,
@@ -30,6 +23,18 @@ struct Grad {
     color : vec3f,
     alpha: f32,
 };
+
+@group(0) @binding(0) var<storage, read_write> output: array<Params>;
+@group(0) @binding(1) var ourSampler: sampler;
+@group(0) @binding(2) var goalTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> uniforms : Uniform;
+@group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
+@group(0) @binding(5) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(6) var forwardTexture : texture_2d<f32>; 
+@group(0) @binding(7) var gradients : array<Grad, nGauss>; 
+
+
+
 
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
@@ -47,7 +52,7 @@ fn GradLoss(
     colorDiff : vec3f,
     background : ptr<function, vec3f>,
     oneMinusAlpha : ptr<function, f32>,
-    grad : ptr<function, array<Grad, 2>>,
+    grad : ptr<storage, array<Grad, nGauss>>,
 ) {
     let p = (*param)[i]; // kinda defeats the purpose, but ok for now
     let gaussP = GaussParams(p.pos, p.scale, p.rot);
@@ -82,46 +87,35 @@ fn GradLoss(
 }
 
 
-@compute @workgroup_size(1) fn computeGD() {
-
-    let size = vec2u(128, 128); // static choosen size
-    let n = f32(size.y * size.x);
-    let sizeSample = vec2f(size);
-    
-    const nGauss = 2;
-
-    var gradients = array<Grad, nGauss>();
+@compute @workgroup_size(1,1,1) 
+fn computeGD(@builtin(global_invocation_id) global_invocation_id : vec3u) {
 
     // loss + backwards pass
-    var currLoss = 0.0;
-    for (var y = 0u; y < size.y; y++) {
-        for (var x = 0u; x < size.x; x++) {
-            let uv = vec2f(vec2u(x, y)) / sizeSample;
-            let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
-            let colorPreMult = vec4f(color.rgb * color.a, color.a);
-            let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
-            let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
+    let sizeSample = vec2f(128, 128);
+    let uv = global_invocation_id.xy / sizeSample;
+    let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
+    let colorPreMult = vec4f(color.rgb * color.a, color.a);
+    let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
+    let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
 
-            currLoss += Loss(gColor, color);
-   
-            let colorGrad = vec3f(
-                (gColor.r - colorPreMult.r),
-                (gColor.g - colorPreMult.g),
-                (gColor.b - colorPreMult.b),
-            );
+    lossOutput[0] += Loss(gColor, color);
 
-            var oneMinusAlpha = 1.0;
-            var background = gColor.rgb;
-            for(var i = nGauss-1; i >= 0; i--) {
-                // params
-                GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha, &gradients);                     
-            }
+    let colorGrad = vec3f(
+        (gColor.r - colorPreMult.r),
+        (gColor.g - colorPreMult.g),
+        (gColor.b - colorPreMult.b),
+    );
 
-        }
+    var oneMinusAlpha = 1.0;
+    var background = gColor.rgb;
+    for(var i = nGauss-1; i >= 0; i--) {
+        // params
+        GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha, &gradients);                     
     }
-    currLoss /= n;
-    lossOutput[0] = currLoss;
 
+    // TODO somehow need a barrier here
+
+    let n = f32(sizeSample.y * sizeSample.x);
     for(var i = 0; i < nGauss; i++) {
         
         gradients[i].pos    /= n;
