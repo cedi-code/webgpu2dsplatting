@@ -12,6 +12,7 @@ struct AdamMemory {
     v : array<Grad, NUM_GAUSS>,
 }
 
+
 fn adamStepGradGauss(
     p : AdamParams, 
     t : f32,

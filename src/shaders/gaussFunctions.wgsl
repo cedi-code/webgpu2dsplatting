@@ -1,15 +1,3 @@
-struct GradGauss {
-    pos : vec2f,
-    scale : vec2f,
-    rot : f32
-}
-
-struct GaussParams {
-    pos : vec2f,
-    scale : vec2f,
-    rot : f32,
-};
-
 
 fn rotMat(r: f32) -> mat2x2f {
     return mat2x2f(

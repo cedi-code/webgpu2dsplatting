@@ -1,32 +1,11 @@
-// constants
-const NUM_GAUSS = 2;
-const xRAY = false;
-const nGauss = 2;
-const sampleDim = 128;
 
-
-struct Params {
-    pos : vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
-};
-
-struct Grad {  
-    pos: atomic<vec2f>,
-    scale : atomic<vec2f>,
-    rot : atomic<f32>,
-    color : atomic<vec3f>,
-    alpha: atomic<f32>,
-};
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<f32>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
-@group(0) @binding(5) var gradients : array<Grad, nGauss>; 
+@group(0) @binding(5) var gradients : array<AtomicGrad, nGauss>; 
 
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {

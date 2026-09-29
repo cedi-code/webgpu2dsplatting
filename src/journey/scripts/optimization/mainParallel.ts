@@ -9,11 +9,14 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
 
-import shaderCodeCompute from '../shaders/gradientDescent2d.wgsl?raw';
+import shaderCodeCompute from '../shaders/gradientBackwardsCompute.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import gaussTileVertStorage from '../shaders/gaussTileVertStorage.wgsl?raw';
 import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
+import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
+import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
+
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -40,11 +43,27 @@ async function main() {
     console.log(ctx.canvas.width );
     console.log(ctx.canvas.height);
 
+    // constants
+    const CONSTANTS = {
+        NUM_GAUSS : 2,
+        xRAY : false,
+        nGauss : 2,
+        sampleDim : 128,
+    };
+
+    const sharedConstants = Object.entries(CONSTANTS)
+    .map(([k, v]) => `const ${k} = ${v};`)
+    .join('\n');
+
     const csModule = ctx.device.createShaderModule({
-        label: '2d gs module',
-        code: (adamShad + shaderGaussFunctions + shaderCodeCompute) 
+        label: 'backwards pass',
+        code: (sharedConstants + shaderGradTypes + shaderGaussFunctions + shaderCodeCompute) 
     });
 
+    const adamModule = ctx.device.createShaderModule({
+        label: 'backwards pass',
+        code: (sharedConstants + shaderGradTypes + adamShad  + shaderCodeCompute) 
+    });
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
@@ -107,7 +126,8 @@ async function main() {
             ],
         },
     );
-    const bindGroupLayoutCompute = ctx.device.createBindGroupLayout({
+
+    const bindGroupLayoutAdamStepCompute = ctx.device.createBindGroupLayout({
         entries: [
             { // dataOutput
             binding: 0,
@@ -117,7 +137,44 @@ async function main() {
                 minBindingSize: paramDesc.sizeBytes,
             },
             },
-            {
+            { // gradients
+            binding: 1,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: paramDesc.sizeBytes, // should be same size as params!
+            },
+            },
+            { // adam memory
+            binding: 2,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: adamMemoryDesc.sizeBytes,
+            },
+            },
+            { // uniforms
+            binding: 3,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'uniform',
+                minBindingSize: uniDesc.sizeBytes,
+            }
+            },
+            ],
+    });
+
+    const bindGroupLayoutBackwardsCompute = ctx.device.createBindGroupLayout({
+        entries: [
+            { // dataOutput
+            binding: 0,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: paramDesc.sizeBytes,
+            },
+            },
+            { // sampler
             binding: 1,
             visibility: GPUShaderStage.COMPUTE,
             sampler: {
@@ -133,16 +190,8 @@ async function main() {
                     multisampled: false,
             },
             },
-            { // uniforms
-            binding: 3,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'uniform',
-                minBindingSize: uniDesc.sizeBytes,
-            },
-            },
             { // lossOutput
-            binding: 4,
+            binding: 3,
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
@@ -150,15 +199,7 @@ async function main() {
             },
             },
             {
-            binding: 5,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'storage',
-                minBindingSize: adamMemoryDesc.sizeBytes,
-            },
-            },
-            {
-            binding: 6, // forward texture
+            binding: 4, // forward texture
             visibility: GPUShaderStage.COMPUTE,
             texture: {
                     sampleType: "float", // type for 'rgba8unorm'
@@ -167,7 +208,7 @@ async function main() {
             },
             },
             { // gradients
-            binding: 7,
+            binding: 5,
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
@@ -183,9 +224,14 @@ async function main() {
     });
 
 
-    const pipelineLayoutCompute = ctx.device.createPipelineLayout({
-        bindGroupLayouts: [ bindGroupLayoutCompute ],
+    const pipelineLayoutBackwardsCompute = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutBackwardsCompute ],
     });
+
+    const pipelineLayoutAdamCompute = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutAdamStepCompute ],
+    });
+
 
     // == creating the pipelines
     const pipeLineForward = ctx.device.createRenderPipeline({
@@ -222,13 +268,21 @@ async function main() {
         }
     });
 
-    const pipelineCompute = ctx.device.createComputePipeline({
+    const pipelineBackwardsCompute = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
-        layout: pipelineLayoutCompute,
+        layout: pipelineLayoutBackwardsCompute,
         compute: {
             module: csModule,
         },
-        
+    });
+
+
+    const pipelineAdamCompute = ctx.device.createComputePipeline({
+        label: 'gd compute pipeline',
+        layout: pipelineLayoutAdamCompute,
+        compute: {
+            module: csModule,
+        },
     });
 
     const renderPassDescriptorScreen : GPURenderPassDescriptor= {
@@ -383,20 +437,30 @@ async function main() {
 
     // ==
 
-    const bindGroup = ctx.device.createBindGroup({
+    const bindGroupBackwards = ctx.device.createBindGroup({
         label: 'bindGroup workbuffer',
-        layout: pipelineCompute.getBindGroupLayout(0),
+        layout: pipelineBackwardsCompute.getBindGroupLayout(0),
         entries: [
             { binding: 0, resource: paramBuffer },
             { binding: 1, resource: sampler },
             { binding: 2, resource: texture },
-            { binding: 3, resource: uniBuff },
-            { binding: 4, resource: lossBuffer },
-            { binding: 5, resource: adamMemBuffer},
-            { binding: 6, resource: textureForward },
-            { binding: 7, resource: gradientBuffer },
+            { binding: 3, resource: lossBuffer },
+            { binding: 4, resource: textureForward },
+            { binding: 5, resource: gradientBuffer },
         ]
     });
+
+    const bindGroupAdam = ctx.device.createBindGroup({
+        label: 'bindGroup workbuffer',
+        layout: pipelineBackwardsCompute.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: paramBuffer },
+            { binding: 1, resource: gradientBuffer },
+            { binding: 2, resource: adamMemBuffer},
+            { binding: 3, resource: uniBuff },
+        ]
+    });
+
 
     const bindGroupForward = ctx.device.createBindGroup({
         label: 'bindGroup forward',
@@ -468,12 +532,21 @@ async function main() {
                 label: 'gd encoder',
             });
             const pass = encoder.beginComputePass({
-                label: 'dumb gradient descent compute pass',
+                label: 'simple backwards compute pass',
             });
-            pass.setPipeline(pipelineCompute);
-            pass.setBindGroup(0, bindGroup);
+            pass.setPipeline(pipelineBackwardsCompute);
+            pass.setBindGroup(0, bindGroupBackwards);
             pass.dispatchWorkgroups(127, 127);
             pass.end();
+
+
+            const pass2 = encoder.beginComputePass({
+                label: 'simple backwards compute pass',
+            });
+            pass2.setPipeline(pipelineAdamCompute);
+            pass2.setBindGroup(0, bindGroupAdam);
+            pass2.dispatchWorkgroups(1);
+            pass2.end();
 
             // mapping result to my buffer
             encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);

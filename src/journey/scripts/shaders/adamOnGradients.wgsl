@@ -1,33 +1,12 @@
-// constants
-const NUM_GAUSS = 2;
-const xRAY = false;
-const nGauss = 2;
-const sampleDim = 128;
-
 
 struct Uniform {
     adamP : AdamParams,
 };
 
-struct Params {
-    pos : vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
-};
-
-struct Grad {  
-    pos: vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
-};
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
-@group(0) @binding(1) var<storage, read> gradients : array<Grad, nGauss>; 
-@group(0) @binding(1) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(1) var<storage, read> gradients : array<AtomicGrad, nGauss>; 
+@group(0) @binding(2) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(3) var<uniform> uniforms : Uniform;
 
 
@@ -50,8 +29,17 @@ fn computeGD() {
     adamMemory.t += 1u;
     var moment = adamMemory.m;
     var varian = adamMemory.v;
+    var gradientsNonAtomic = array<Grad, nGauss>();
 
-    adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradients);
+    for(var i = 0; i < nGauss; i++) {
+        gradientsNonAtomic[i].pos = atomicLoad(&(gradients[i].pos));
+        gradientsNonAtomic[i].scale = atomicLoad(&(gradients[i].scale));
+        gradientsNonAtomic[i].rot = atomicLoad(&(gradients[i].rot));
+        gradientsNonAtomic[i].color = atomicLoad(&(gradients[i].color));
+        gradientsNonAtomic[i].alpha = atomicLoad(&(gradients[i].alpha));
+    }
+
+    adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradientsNonAtomic);
     adamMemory.m = moment;
     adamMemory.v = varian;
 
@@ -59,11 +47,11 @@ fn computeGD() {
 
         let initalParams = output[i];
 
-        let newQ = initalParams.pos - gradients[i].pos;
-        let newS = initalParams.scale - gradients[i].scale;
-        let newR = initalParams.rot - gradients[i].rot;
-        let newC = initalParams.color - gradients[i].color;
-        let newA = initalParams.alpha - gradients[i].alpha;
+        let newQ = initalParams.pos - gradientsNonAtomic[i].pos;
+        let newS = initalParams.scale - gradientsNonAtomic[i].scale;
+        let newR = initalParams.rot - gradientsNonAtomic[i].rot;
+        let newC = initalParams.color - gradientsNonAtomic[i].color;
+        let newA = initalParams.alpha - gradientsNonAtomic[i].alpha;
 
         output[i] = Params(newQ, newS, newR, newC, newA);
     }
