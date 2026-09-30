@@ -14,6 +14,8 @@ import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import gaussTileVertStorage from '../shaders/gaussTileVertStorage.wgsl?raw';
 import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
+import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
+
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -39,12 +41,12 @@ async function main() {
 
     const csModule = ctx.device.createShaderModule({
         label: '2d gs module',
-        code: (adamShad + shaderGaussFunctions + shaderCodeCompute) 
+        code: (shaderGradTypes + adamShad + shaderGaussFunctions + shaderCodeCompute) 
     });
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
-        code: shaderGaussFunctions + gaussTileVertStorage,
+        code: shaderGradTypes + shaderGaussFunctions + gaussTileVertStorage,
     });
 
     const fsModule = ctx.device.createShaderModule({

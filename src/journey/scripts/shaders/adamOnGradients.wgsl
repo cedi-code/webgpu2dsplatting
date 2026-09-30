@@ -5,10 +5,19 @@ struct Uniform {
 
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
-@group(0) @binding(1) var<storage, read> gradients : array<AtomicGrad, nGauss>; 
+@group(0) @binding(1) var<storage, read_write> gradients : array<AtomicGrad, nGauss>; 
 @group(0) @binding(2) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(3) var<uniform> uniforms : Uniform;
 
+fn loadGrad(p: ptr<storage, AtomicGrad, read_write>) -> Grad {
+    var g: Grad;
+    g.pos   = loadVec2f(&((*p).pos));
+    g.scale = loadVec2f(&((*p).scale));
+    g.rot   = loadf32(&((*p).rot));
+    g.color = loadVec3f(&((*p).color));
+    g.alpha = loadf32(&((*p).alpha));
+    return g;
+}
 
 @compute @workgroup_size(1,1,1) 
 fn computeGD() {
@@ -18,10 +27,6 @@ fn computeGD() {
     // for(var i = 0; i < nGauss; i++) {
         
     //     gradients[i].pos    /= n;
-    //     gradients[i].scale  /= n;
-    //     gradients[i].rot    /= n;
-    //     gradients[i].color  /= n;
-    //     gradients[i].alpha  /= n;
 
     // }
 
@@ -32,11 +37,7 @@ fn computeGD() {
     var gradientsNonAtomic = array<Grad, nGauss>();
 
     for(var i = 0; i < nGauss; i++) {
-        gradientsNonAtomic[i].pos = atomicLoad(&(gradients[i].pos));
-        gradientsNonAtomic[i].scale = atomicLoad(&(gradients[i].scale));
-        gradientsNonAtomic[i].rot = atomicLoad(&(gradients[i].rot));
-        gradientsNonAtomic[i].color = atomicLoad(&(gradients[i].color));
-        gradientsNonAtomic[i].alpha = atomicLoad(&(gradients[i].alpha));
+        gradientsNonAtomic[i] = loadGrad(&gradients[i]);
     }
 
     adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradientsNonAtomic);

@@ -16,7 +16,7 @@ import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
 import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
 import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
-
+import atomicTypes from '../../../shaders/atomicTypes.wgsl?raw';
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -49,6 +49,7 @@ async function main() {
         xRAY : false,
         nGauss : 2,
         sampleDim : 128,
+        EPSILON : MACHINE_EPSILON,
     };
 
     const sharedConstants = Object.entries(CONSTANTS)
@@ -57,17 +58,33 @@ async function main() {
 
     const csModule = ctx.device.createShaderModule({
         label: 'backwards pass',
-        code: (sharedConstants + shaderGradTypes + shaderGaussFunctions + shaderCodeCompute) 
+        code: (
+            sharedConstants + 
+            shaderGradTypes + 
+            atomicTypes + 
+            shaderGaussFunctions + 
+            shaderCodeCompute
+        ) 
     });
 
     const adamModule = ctx.device.createShaderModule({
-        label: 'backwards pass',
-        code: (sharedConstants + shaderGradTypes + adamShad  + shaderCodeCompute) 
+        label: 'adam pass',
+        code: (
+            sharedConstants + 
+            shaderGradTypes + 
+            atomicTypes + 
+            adamShad  + 
+            adamCompute
+        ) 
     });
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
-        code: shaderGaussFunctions + gaussTileVertStorage,
+        code: (
+            shaderGradTypes +
+            shaderGaussFunctions + 
+            gaussTileVertStorage
+        ),
     });
 
 
@@ -281,7 +298,7 @@ async function main() {
         label: 'gd compute pipeline',
         layout: pipelineLayoutAdamCompute,
         compute: {
-            module: csModule,
+            module: adamModule,
         },
     });
 

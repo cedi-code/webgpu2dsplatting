@@ -13,13 +13,7 @@ struct Unfirom {
 
 // only for adam grad
 const NUM_GAUSS = 1;
-struct Grad {  
-    pos: vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
-};
+
 struct MyAdamMemory {
     t : u32,
     m : array<GradGauss, NUM_GAUSS>,

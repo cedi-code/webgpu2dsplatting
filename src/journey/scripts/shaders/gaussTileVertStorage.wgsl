@@ -1,11 +1,3 @@
-struct Params {
-    pos : vec2f,
-    scale : vec2f,
-    rot : f32,
-    color : vec3f,
-    alpha: f32,
-};
-
 struct SimpleVertexShaderOutput {
     @builtin(position) position: vec4f,
     @location(0) grid: vec2f,

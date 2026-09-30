@@ -14,6 +14,8 @@ import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import staticTileVert from '../shaders/staticTileVert.wgsl?raw';
 import textureFrag from '../shaders/simpleTextureFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
+import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
+
 import type uPlot from 'uplot';
 
 
@@ -93,7 +95,7 @@ async function main(canvasName : string, plot : uPlot, pane : Pane,  showAdam : 
 
     const csModule = ctx.device.createShaderModule({
         label: 'simple 2d gs module',
-        code: (adamShad + shaderGaussFunctions + shaderCodeCompute) 
+        code: (shaderGradTypes + adamShad + shaderGaussFunctions + shaderCodeCompute) 
     });
 
 
@@ -104,7 +106,7 @@ async function main(canvasName : string, plot : uPlot, pane : Pane,  showAdam : 
 
     const fsModule = ctx.device.createShaderModule({
         label: 'simple texture frag impl',
-        code: (shaderGaussFunctions + textureFrag) 
+        code: (shaderGradTypes + shaderGaussFunctions + textureFrag) 
     });
     
     // number of splats

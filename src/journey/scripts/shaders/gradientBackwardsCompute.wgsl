@@ -5,8 +5,7 @@
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<f32>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
-@group(0) @binding(5) var gradients : array<AtomicGrad, nGauss>; 
-
+@group(0) @binding(5) var<storage, read_write> gradients : array<AtomicGrad, nGauss>; 
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
@@ -23,7 +22,7 @@ fn GradLoss(
     colorDiff : vec3f,
     background : ptr<function, vec3f>,
     oneMinusAlpha : ptr<function, f32>,
-    grad : ptr<storage, array<Grad, nGauss>>,
+    grad : ptr<storage, array<AtomicGrad, nGauss>, read_write>,
 ) {
     let p = (*param)[i]; // kinda defeats the purpose, but ok for now
     let gaussP = GaussParams(p.pos, p.scale, p.rot);
@@ -33,26 +32,25 @@ fn GradLoss(
     let alpha = sigmoid(p.alpha, 4.0);
 
     (*background) -= alpha * gauss * vecSigmoid(p.color);
-    (*background) /= (1.0 - alpha * gauss + uniforms.adamP.eps);  
+    (*background) /= (1.0 - alpha * gauss + EPSILON);  
 
     let dAlphaBlend = alpha * (*oneMinusAlpha) * colorDiffDot;
 
     let gradGauss = EvalGradGauss(gaussP, x);    
 
-    atomicAdd(&(*grad)[i].pos,    gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY));
-    atomicAdd(&(*grad)[i].scale,  gradGauss.scale * select((dAlphaBlend), 1.0, xRAY));
-    atomicAdd(&(*grad)[i].rot,    gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY));
+    atomicAddVec2f(&(*grad)[i].pos,    gradGauss.pos   * select((dAlphaBlend), 1.0, xRAY));
+    atomicAddVec2f(&(*grad)[i].scale,  gradGauss.scale * select((dAlphaBlend), 1.0, xRAY));
+    atomicAddf32(&(*grad)[i].rot,    gradGauss.rot   * select((dAlphaBlend), 1.0, xRAY));
 
     // color gradient
-
-    atomicAdd(&(*grad)[i].color, alpha * gauss * select((*oneMinusAlpha), 1.0, xRAY) * vec3f(
+    atomicAddVec3f(&(*grad)[i].color, alpha * gauss * select((*oneMinusAlpha), 1.0, xRAY) * vec3f(
         colorDiff.r * dSigmoid(p.color.r, 4.0),
         colorDiff.g * dSigmoid(p.color.g, 4.0),
         colorDiff.b * dSigmoid(p.color.b, 4.0),
     ));
 
     // alpha gradient  
-    atomicAdd(&(*grad)[i].alpha, colorDiffDot * gauss * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0));
+    atomicAddf32(&(*grad)[i].alpha, colorDiffDot * gauss * (*oneMinusAlpha) * dSigmoid(p.alpha, 4.0));
 
     (*oneMinusAlpha) *= (1.0 - alpha * gauss);
 }
@@ -63,7 +61,7 @@ fn computeGD(@builtin(global_invocation_id) global_invocation_id : vec3u) {
 
     // loss + backwards pass
     let sizeSample = vec2f(sampleDim);
-    let uv = global_invocation_id.xy / sizeSample;
+    let uv = vec2f(global_invocation_id.xy) / sizeSample;
     let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
     let colorPreMult = vec4f(color.rgb * color.a, color.a);
     let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
