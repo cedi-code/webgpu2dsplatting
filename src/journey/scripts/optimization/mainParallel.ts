@@ -499,20 +499,6 @@ async function main() {
         lossLog: 0.0,
     }
 
-    let updateResults = async (params_out : Output) : Promise<Float32Array<ArrayBuffer>> => {
-        // read results
-        await resultBuffer.mapAsync(GPUMapMode.READ);
-        const result = new Float32Array(resultBuffer.getMappedRange());
-        
-        params_out.finalQ = result[1];        
-        input.set(result, 0);
-
-        // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
-        resultBuffer.unmap();        
-
-        return result;
-    }
-
     let updateLossResults = async () => {
 
         // read loss output
@@ -538,64 +524,64 @@ async function main() {
     render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
 
     let runGD = async () => {
-
+        
         const steps = 100;
+        const start = performance.now();
+        console.log("start");
+
+        const encoder = ctx.device.createCommandEncoder({
+            label: 'gd encoder',
+        });
+
         for(let i = 0; i < steps; i++) {
 
-            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+            // reset the gradients, maybe do this in the shader and not here?
+            encoder.clearBuffer(gradientBuffer, 0, gradDesc.sizeBytes);
+            encoder.clearBuffer(lossBuffer, 0, lossBuffDesc.sizeBytes);
 
-            const encoder = ctx.device.createCommandEncoder({
-                label: 'gd encoder',
-            });
             const pass = encoder.beginComputePass({
                 label: 'simple backwards compute pass',
             });
+
+            // backwards
             pass.setPipeline(pipelineBackwardsCompute);
             pass.setBindGroup(0, bindGroupBackwards);
             pass.dispatchWorkgroups(CONSTANTS.sampleDim, CONSTANTS.sampleDim);
+
+            // adam
+            pass.setPipeline(pipelineAdamCompute);
+            pass.setBindGroup(0, bindGroupAdam);
+            pass.dispatchWorkgroups(1);
+
             pass.end();
-
-
-            const pass2 = encoder.beginComputePass({
-                label: 'simple backwards compute pass',
-            });
-            pass2.setPipeline(pipelineAdamCompute);
-            pass2.setBindGroup(0, bindGroupAdam);
-            pass2.dispatchWorkgroups(1);
-            pass2.end();
-
-            // reset the gradients, maybe do this in the shader and not here!
-            ctx.device.queue.writeBuffer(gradientBuffer, 0, new Int32Array(gradDesc.size));
-            ctx.device.queue.writeBuffer(lossBuffer, 0, lossV);
-
-            // mapping result to my buffer
-            encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);
-            encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
-
-
-            // run the work lmao
-            const commandBuffer = encoder.finish();
-            ctx.device.queue.submit([commandBuffer]);
-
-            // this updates the input values, not clean
-            await updateResults(PARAMS_OUT);
-
-            // updates loss plot
-            await updateLossResults();
-
-            ctx.device.queue.writeBuffer(paramBuffer, 0, input);
-
+            
             // forward pass
-            ctx.renderPassDescriptor = renderPassDescriptorTexture;
-            render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats, true);
+            const passRender = encoder.beginRenderPass(renderPassDescriptorTexture);
+            passRender.setPipeline(pipeLineForward);
+            passRender.setBindGroup(0, bindGroupForward);
+            passRender.draw(6, numSplats);
 
-            // display on canvas
-            ctx.renderPassDescriptor = renderPassDescriptorScreen;
-            render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
+            passRender.end();
         }
-        prtyPrint(input);
 
+        // copy buffer to cpu (expensive! 0.1s)
+        encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+        // run the work lmao
+        const commandBuffer = encoder.finish();
+        ctx.device.queue.submit([commandBuffer]);
         
+        // get loss
+        await updateLossResults();
+
+        // display on canvas
+        ctx.renderPassDescriptor = renderPassDescriptorScreen;
+        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
+
+        await ctx.device.queue.onSubmittedWorkDone();
+
+        let elapsed = performance.now() - start;
+        console.log("elapsed time:", elapsed / 1000.0);
+        prtyPrint(input);        
     }
     // == interactive suff, not really needed
     {
