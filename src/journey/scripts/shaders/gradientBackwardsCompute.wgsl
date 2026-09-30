@@ -59,6 +59,7 @@ fn GradLoss(
 @compute @workgroup_size(1,1,1) 
 fn computeGD(@builtin(global_invocation_id) global_invocation_id : vec3u) {
 
+    let n = f32(sampleDim * sampleDim);
     // loss + backwards pass
     let sizeSample = vec2f(sampleDim);
     let uv = vec2f(global_invocation_id.xy) / sizeSample;
@@ -67,7 +68,7 @@ fn computeGD(@builtin(global_invocation_id) global_invocation_id : vec3u) {
     let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
     let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
 
-    lossOutput[0] += Loss(gColor, color);
+    lossOutput[0] += 1.0/n * Loss(gColor, color);
 
     let colorGrad = vec3f(
         (gColor.r - colorPreMult.r),

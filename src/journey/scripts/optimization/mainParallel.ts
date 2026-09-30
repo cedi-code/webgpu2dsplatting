@@ -395,7 +395,7 @@ async function main() {
     gradDesc.label = 'gradient buffer';
     const gradientBuffer = bufferManager.createBuffer(paramDesc);
 
-    ctx.device.queue.writeBuffer(gradientBuffer, 0, new Float32Array(gradDesc.size));
+    ctx.device.queue.writeBuffer(gradientBuffer, 0, new Int32Array(gradDesc.size));
 
     // loss result buffer
     const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
@@ -455,7 +455,7 @@ async function main() {
     // ==
 
     const bindGroupBackwards = ctx.device.createBindGroup({
-        label: 'bindGroup workbuffer',
+        label: 'bindGroup backwards pass',
         layout: pipelineBackwardsCompute.getBindGroupLayout(0),
         entries: [
             { binding: 0, resource: paramBuffer },
@@ -468,8 +468,8 @@ async function main() {
     });
 
     const bindGroupAdam = ctx.device.createBindGroup({
-        label: 'bindGroup workbuffer',
-        layout: pipelineBackwardsCompute.getBindGroupLayout(0),
+        label: 'bindGroup adam pass',
+        layout: pipelineAdamCompute.getBindGroupLayout(0),
         entries: [
             { binding: 0, resource: paramBuffer },
             { binding: 1, resource: gradientBuffer },
@@ -522,7 +522,6 @@ async function main() {
         const lastStep = lossSteps.at(-1) ?? 0;
         lossSteps.push(lastStep + 1);
         
-
         lossPlot.setData([lossSteps, lossData]);
 
         // unmap getMapped range is only valid buffer until we call unmap, the length will be set to 0
@@ -553,7 +552,7 @@ async function main() {
             });
             pass.setPipeline(pipelineBackwardsCompute);
             pass.setBindGroup(0, bindGroupBackwards);
-            pass.dispatchWorkgroups(127, 127);
+            pass.dispatchWorkgroups(CONSTANTS.sampleDim, CONSTANTS.sampleDim);
             pass.end();
 
 
@@ -564,6 +563,10 @@ async function main() {
             pass2.setBindGroup(0, bindGroupAdam);
             pass2.dispatchWorkgroups(1);
             pass2.end();
+
+            // reset the gradients, maybe do this in the shader and not here!
+            ctx.device.queue.writeBuffer(gradientBuffer, 0, new Int32Array(gradDesc.size));
+            ctx.device.queue.writeBuffer(lossBuffer, 0, lossV);
 
             // mapping result to my buffer
             encoder.copyBufferToBuffer(paramBuffer, 0, resultBuffer, 0, resultBuffer.size);

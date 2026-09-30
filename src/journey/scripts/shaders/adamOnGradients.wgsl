@@ -23,7 +23,7 @@ fn loadGrad(p: ptr<storage, AtomicGrad, read_write>) -> Grad {
 fn computeGD() {
     // assume gradients is done (but idk if i also assume that they are normalized?)
 
-    // let n = f32(sampleDim * sampleDim);
+    let n = f32(sampleDim * sampleDim);
     // for(var i = 0; i < nGauss; i++) {
         
     //     gradients[i].pos    /= n;
@@ -38,6 +38,12 @@ fn computeGD() {
 
     for(var i = 0; i < nGauss; i++) {
         gradientsNonAtomic[i] = loadGrad(&gradients[i]);
+        gradientsNonAtomic[i].pos /= n;
+        gradientsNonAtomic[i].scale /= n;
+        gradientsNonAtomic[i].rot /= n;
+        gradientsNonAtomic[i].color /= n;
+        gradientsNonAtomic[i].alpha /= n;
+
     }
 
     adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradientsNonAtomic);
