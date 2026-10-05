@@ -45,43 +45,38 @@ fn adamStepGradGauss(
 fn adamStepGrad(
     p : AdamParams, 
     t : f32,
-    momentum : ptr<function, array<Grad, NUM_GAUSS>>,
-    variance : ptr<function, array<Grad, NUM_GAUSS>>,
-    grad   : ptr<function, array<Grad, NUM_GAUSS>>, // by copy for now
+    momentum : ptr<function, Grad>,
+    variance : ptr<function, Grad>,
+    grad   : ptr<function, Grad>, // by copy for now
     ) 
 {
     let alpha_t = p.lr * sqrt((1.0 - pow(p.b2, t)))/(1.0-pow(p.b1, t));
 
-    for(var i = 0; i < NUM_GAUSS; i++) {
 
-        let mPos = &((*momentum)[i].pos);
-        let vPos = &((*variance)[i].pos);
-        let gPos =  &(*grad)[i].pos;
-        adamStepVec2(p, mPos, vPos, gPos, alpha_t);
+    let mPos = &((*momentum).pos);
+    let vPos = &((*variance).pos);
+    let gPos =  &(*grad).pos;
+    adamStepVec2(p, mPos, vPos, gPos, alpha_t);
 
-        let mSca = &(*momentum)[i].scale;
-        let vSca = &(*variance)[i].scale;
-        let gSca =  &(*grad)[i].scale;
-        adamStepVec2(p, mSca, vSca, gSca, alpha_t);
+    let mSca = &(*momentum).scale;
+    let vSca = &(*variance).scale;
+    let gSca =  &(*grad).scale;
+    adamStepVec2(p, mSca, vSca, gSca, alpha_t);
 
-        let mRot = &(*momentum)[i].rot;
-        let vRot = &(*variance)[i].rot;
-        let gRot =  &(*grad)[i].rot;
-        adamStepScalar(p,mRot, vRot, gRot, alpha_t);
+    let mRot = &(*momentum).rot;
+    let vRot = &(*variance).rot;
+    let gRot =  &(*grad).rot;
+    adamStepScalar(p,mRot, vRot, gRot, alpha_t);
 
-        let mCol = &(*momentum)[i].color;
-        let vCol = &(*variance)[i].color;
-        let gCol =  &(*grad)[i].color;
-        adamStepVec3(p,mCol, vCol, gCol, alpha_t);
+    let mCol = &(*momentum).color;
+    let vCol = &(*variance).color;
+    let gCol =  &(*grad).color;
+    adamStepVec3(p,mCol, vCol, gCol, alpha_t);
 
-        let mAlp = &(*momentum)[i].alpha;
-        let vAlp = &(*variance)[i].alpha;
-        let gAlp =  &(*grad)[i].alpha;
-        adamStepScalar(p,mAlp, vAlp, gAlp, alpha_t);
-
-    }
-
-    
+    let mAlp = &(*momentum).alpha;
+    let vAlp = &(*variance).alpha;
+    let gAlp =  &(*grad).alpha;
+    adamStepScalar(p,mAlp, vAlp, gAlp, alpha_t);    
 }
 
 

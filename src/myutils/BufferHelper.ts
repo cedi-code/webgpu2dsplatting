@@ -320,4 +320,4 @@ const bufferManager: BufferManager = {
     }
 };
 
-export { bufferManager, VertexBufferDescriptorBuilder, UniformBufferDescriptorBuilder, IndexBufferDescriptorBuilder };
+export { bufferManager, VertexBufferDescriptorBuilder, UniformBufferDescriptorBuilder, IndexBufferDescriptorBuilder, getByteBaseSize };

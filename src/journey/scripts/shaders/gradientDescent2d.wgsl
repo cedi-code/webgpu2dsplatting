@@ -120,8 +120,9 @@ fn GradLoss(
         adamMemory.t += 1u;
         var moment = adamMemory.m;
         var varian = adamMemory.v;
-
-        adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradients);
+        for(var i = 0; i < nGauss; i++) {
+            adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment[i], &varian[i], &gradients[i]);
+        }
         adamMemory.m = moment;
         adamMemory.v = varian;
 
@@ -137,4 +138,5 @@ fn GradLoss(
 
             output[i] = Params(newQ, newS, newR, newC, newA);
         }
+
     }

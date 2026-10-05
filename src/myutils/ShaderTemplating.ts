@@ -12,8 +12,18 @@ const atomicFnName = (t: UniformBaseType, p: Precision, space : string, operatio
     return `fn atomic${operation}${t}_${space}${p === 'u32' ? `_u` : ""}`
 };
 
+/* 
+== Example fn ==
+
+atomicAddvec2f(ptr_val : ptr<>, value : vec2f)
+
+atomicAddf32_u(ptr_val : ptr<>, value : f32)
+
+atomicLoadf32(ptr_val : ptr<>, value : f32)
+
+*/
 const generateAtomicOperations : (() => string) = () => {
-    
+
     type Options = {
         spaces : string[],
         atomicTypes : UniformBaseType[],
@@ -44,11 +54,11 @@ const generateAtomicOperations : (() => string) = () => {
         const accessMode = space === 'storage' ? ', read_write' : '';
 
         const qType = size === 1 ? precision : `vec${size}${precision[0]}`;
-
-        const name = atomicFnName(t,precision,space,"Add");
+        const opName = "Add";
+        const name = atomicFnName(t,precision,space,opName);
         let functionHeader = `${name}
             (ptr_val: ptr<${space}, 
-                    ${ atomicVecType(t, precision)}, 
+                    ${ atomicVecType(t, precision)} 
                     ${accessMode}
                     >, 
             value: ${t}) 
@@ -66,19 +76,13 @@ const generateAtomicOperations : (() => string) = () => {
         return functionHeader + `{\n` + functionQ + `\n` + functionAdds + `\n}`;
     };
 
-    let result = ``;
-    result += `const QUANTIZE_FACTOR: f32 = ${QUANTIZE_FACTOR.toFixed(1)};\n`;
-    result += `const DEQUANTIZE_FACTOR: f32 = ${DEQUANTIZE_FACTOR};\n`;
-    result += `const QUANTIZE_FACTOR_UNSIGNED: f32 = ${QUANTIZE_FACTOR_UNSIGNED.toFixed(1)};\n`;
-    result += `const DEQUANTIZE_FACTOR_UNSIGNED: f32 = ${DEQUANTIZE_FACTOR_UNSIGNED};\n\n`;
-
     const generateAtomicLoad = (space: string, t: UniformBaseType, precision: 'u32' | 'i32') => {
             const size = getByteBaseSize(t) / 4.0;
             const isUnsigned = precision === 'u32';
             const dequantizeFactor = isUnsigned ? 'DEQUANTIZE_FACTOR_UNSIGNED' : 'DEQUANTIZE_FACTOR';
             const accessMode = space === 'storage' ? ', read_write' : '';
-
-            const name = atomicFnName(t,precision,space,"Load");
+            const opName = "Load";
+            const name = atomicFnName(t,precision,space,opName);
             let functionHeader = `${name}
             (
                 p: ptr<${space}, ${atomicVecType(t, precision)}${accessMode}>
@@ -96,6 +100,13 @@ const generateAtomicOperations : (() => string) = () => {
             }
             return functionHeader + `{\n` + body + `\n}`;
     };
+
+    let result = ``;
+    result += `const QUANTIZE_FACTOR: f32 = ${QUANTIZE_FACTOR.toFixed(1)};\n`;
+    result += `const DEQUANTIZE_FACTOR: f32 = ${DEQUANTIZE_FACTOR};\n`;
+    result += `const QUANTIZE_FACTOR_UNSIGNED: f32 = ${QUANTIZE_FACTOR_UNSIGNED.toFixed(1)};\n`;
+    result += `const DEQUANTIZE_FACTOR_UNSIGNED: f32 = ${DEQUANTIZE_FACTOR_UNSIGNED};\n\n`;
+
 
     for (let s = 0; s < options.spaces.length; s++) {
         const space = options.spaces[s];

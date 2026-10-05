@@ -8,6 +8,7 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
+import { generateAtomicOperations } from '../../../myutils/ShaderTemplating';
 
 import shaderCodeCompute from '../shaders/gradientBackwardsCompute.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
@@ -16,7 +17,7 @@ import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
 import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
 import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
-import atomicTypes from '../../../shaders/atomicTypes.wgsl?raw';
+import reduceCompute from '../shaders/reduceGradients.wgsl?raw';
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -31,7 +32,6 @@ let plotHTMLElem = document.getElementById('loss-plot') ?? document.body;
 let lossPlot = createLossPlot(plotHTMLElem);
 
 const MACHINE_EPSILON = 1.19e-07;
-
 
 async function main() {
 
@@ -50,31 +50,46 @@ async function main() {
         nGauss : 2,
         sampleDim : 128,
         EPSILON : MACHINE_EPSILON,
+        chunkWidth: 16,
+        chunkHeight: 16,
     };
 
     const sharedConstants = Object.entries(CONSTANTS)
     .map(([k, v]) => `const ${k} = ${v};`)
     .join('\n');
 
-    const csModule = ctx.device.createShaderModule({
+    const csBackwardsModule = ctx.device.createShaderModule({
         label: 'backwards pass',
         code: (
             sharedConstants + 
             shaderGradTypes + 
-            atomicTypes + 
+            generateAtomicOperations() + 
             shaderGaussFunctions + 
             shaderCodeCompute
         ) 
     });
+
+    console.log(generateAtomicOperations());
+    console.log(shaderCodeCompute);
+
 
     const adamModule = ctx.device.createShaderModule({
         label: 'adam pass',
         code: (
             sharedConstants + 
             shaderGradTypes + 
-            atomicTypes + 
+            generateAtomicOperations() + 
             adamShad  + 
             adamCompute
+        ) 
+    });
+
+    const reduceModule = ctx.device.createShaderModule({
+        label: 'reduce pass',
+        code: (
+            sharedConstants + 
+            shaderGradTypes + 
+            reduceCompute
         ) 
     });
     
@@ -104,8 +119,22 @@ async function main() {
                 .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
 
+    // would be cool if i can test that..
+    const chunksX = ((CONSTANTS.sampleDim + CONSTANTS.chunkWidth - 1)  / CONSTANTS.chunkWidth);
+    const chunksY = ((CONSTANTS.sampleDim + CONSTANTS.chunkHeight - 1)  / CONSTANTS.chunkHeight)
+    const numChunks = chunksX * chunksY;
+
+    // i still cant do arrays of structs...
+    const gradientChunkBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numChunks * numSplats);
+    gradientChunkBuilder.add('pos', "vec2f")
+                        .add('scale', "vec2f")
+                        .add('rot', "f32")
+                        .add('color', "vec3f")
+                        .add('alpha', "f32");
+    const gradChunkDesc = gradientChunkBuilder.build();
+
     const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst');
-    lossBuilder.add('loss', "f32");
+    lossBuilder.add('loss', "i32");
     const lossBuffDesc = lossBuilder.build();
 
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
@@ -159,7 +188,7 @@ async function main() {
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
-                minBindingSize: paramDesc.sizeBytes, // should be same size as params!
+                minBindingSize: gradChunkDesc.sizeBytes, 
             },
             },
             { // adam memory
@@ -178,8 +207,9 @@ async function main() {
                 minBindingSize: uniDesc.sizeBytes,
             }
             },
-            ],
+        ],
     });
+
 
     const bindGroupLayoutBackwardsCompute = ctx.device.createBindGroupLayout({
         entries: [
@@ -229,7 +259,7 @@ async function main() {
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
-                minBindingSize: paramDesc.sizeBytes, // should be same size as params!
+                minBindingSize: gradChunkDesc.sizeBytes, 
             },
             },
         ],
@@ -289,9 +319,17 @@ async function main() {
         label: 'gd compute pipeline',
         layout: pipelineLayoutBackwardsCompute,
         compute: {
-            module: csModule,
+            module: csBackwardsModule,
         },
     });
+
+    const pipelineReduceCompute  = ctx.device.createComputePipeline({
+        label: 'gd compute pipeline',
+        layout: pipelineLayoutBackwardsCompute,
+        compute: {
+            module: reduceModule,
+        },
+    }); 
 
 
     const pipelineAdamCompute = ctx.device.createComputePipeline({
@@ -373,7 +411,7 @@ async function main() {
 
     // gauss 2
     input.set([0.3, 0.6], nextUnit + posOff);
-    input.set([0.7, 0.7], nextUnit + scaleOff);
+    input.set([0.7, 1.0], nextUnit + scaleOff);
     input.set([0.0], nextUnit + rotOff);
     input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
     input.set([4.0], nextUnit + alphaOff);
@@ -391,23 +429,16 @@ async function main() {
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
     // gradient buffer
-    let gradDesc = paramDesc;
+    let gradDesc = gradChunkDesc;
     gradDesc.label = 'gradient buffer';
-    const gradientBuffer = bufferManager.createBuffer(paramDesc);
+    const gradientBuffer = bufferManager.createBuffer(gradDesc);
 
-    ctx.device.queue.writeBuffer(gradientBuffer, 0, new Int32Array(gradDesc.size));
+    ctx.device.queue.writeBuffer(gradientBuffer, 0, new Float32Array(gradDesc.size));
 
-    // loss result buffer
+    // loss result buffer (atomic uint array)
     const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
-    const lossV = new Float32Array(lossBuffDesc.size);
+    const lossV = new Uint32Array(lossBuffDesc.size);
     ctx.device.queue.writeBuffer(lossBuffer, 0, lossV);
-
-
-    const resultBuffer = ctx.device.createBuffer({
-        label: 'result buffer',
-        size: paramDesc.sizeBytes,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-    });
 
     const lossResultBuffer = ctx.device.createBuffer({
         label: 'loss result buffer',
@@ -435,7 +466,7 @@ async function main() {
 
     // == texture stuff
 
-    const testImageUrl = 'assets/testImage2splats.jpg';
+    const testImageUrl = 'assets/overlappImage.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -477,7 +508,6 @@ async function main() {
             { binding: 3, resource: uniBuff },
         ]
     });
-
 
     const bindGroupForward = ctx.device.createBindGroup({
         label: 'bindGroup forward',
@@ -546,7 +576,11 @@ async function main() {
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
             pass.setBindGroup(0, bindGroupBackwards);
-            pass.dispatchWorkgroups(CONSTANTS.sampleDim, CONSTANTS.sampleDim);
+            pass.dispatchWorkgroups(chunksX, chunksY);
+
+            // reduce
+            pass.setPipeline(pipelineReduceCompute)
+            pass.dispatchWorkgroups(1);
 
             // adam
             pass.setPipeline(pipelineAdamCompute);
