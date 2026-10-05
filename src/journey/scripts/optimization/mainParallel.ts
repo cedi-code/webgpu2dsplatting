@@ -52,6 +52,7 @@ async function main() {
         EPSILON : MACHINE_EPSILON,
         chunkWidth: 16,
         chunkHeight: 16,
+        nSteps : 100,
     };
 
     const sharedConstants = Object.entries(CONSTANTS)
@@ -65,6 +66,7 @@ async function main() {
             shaderGradTypes + 
             generateAtomicOperations() + 
             shaderGaussFunctions + 
+            adamShad +
             shaderCodeCompute
         ) 
     });
@@ -89,6 +91,7 @@ async function main() {
         code: (
             sharedConstants + 
             shaderGradTypes + 
+            adamShad +
             reduceCompute
         ) 
     });
@@ -120,8 +123,8 @@ async function main() {
     const paramDesc = paramBuilder.build();
 
     // would be cool if i can test that..
-    const chunksX = ((CONSTANTS.sampleDim + CONSTANTS.chunkWidth - 1)  / CONSTANTS.chunkWidth);
-    const chunksY = ((CONSTANTS.sampleDim + CONSTANTS.chunkHeight - 1)  / CONSTANTS.chunkHeight)
+    const chunksX = Math.round(((CONSTANTS.sampleDim + CONSTANTS.chunkWidth - 1)  / CONSTANTS.chunkWidth));
+    const chunksY = Math.round(((CONSTANTS.sampleDim + CONSTANTS.chunkHeight - 1)  / CONSTANTS.chunkHeight));
     const numChunks = chunksX * chunksY;
 
     // i still cant do arrays of structs...
@@ -133,9 +136,11 @@ async function main() {
                         .add('alpha', "f32");
     const gradChunkDesc = gradientChunkBuilder.build();
 
-    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst');
-    lossBuilder.add('loss', "i32");
+    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', CONSTANTS.nSteps * numChunks);
+    lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
+    console.log(lossBuffDesc);
+    console.log(CONSTANTS.nSteps * numChunks);
 
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
@@ -173,45 +178,7 @@ async function main() {
         },
     );
 
-    const bindGroupLayoutAdamStepCompute = ctx.device.createBindGroupLayout({
-        entries: [
-            { // dataOutput
-            binding: 0,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'storage',
-                minBindingSize: paramDesc.sizeBytes,
-            },
-            },
-            { // gradients
-            binding: 1,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'storage',
-                minBindingSize: gradChunkDesc.sizeBytes, 
-            },
-            },
-            { // adam memory
-            binding: 2,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'storage',
-                minBindingSize: adamMemoryDesc.sizeBytes,
-            },
-            },
-            { // uniforms
-            binding: 3,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'uniform',
-                minBindingSize: uniDesc.sizeBytes,
-            }
-            },
-        ],
-    });
-
-
-    const bindGroupLayoutBackwardsCompute = ctx.device.createBindGroupLayout({
+    const bindGroupLayoutCompute = ctx.device.createBindGroupLayout({
         entries: [
             { // dataOutput
             binding: 0,
@@ -262,6 +229,22 @@ async function main() {
                 minBindingSize: gradChunkDesc.sizeBytes, 
             },
             },
+            { // adam memory
+            binding: 6,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: adamMemoryDesc.sizeBytes,
+            },
+            },
+            { // uniforms
+            binding: 7,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'uniform',
+                minBindingSize: uniDesc.sizeBytes,
+            }
+            },
         ],
     });
 
@@ -271,12 +254,8 @@ async function main() {
     });
 
 
-    const pipelineLayoutBackwardsCompute = ctx.device.createPipelineLayout({
-        bindGroupLayouts: [ bindGroupLayoutBackwardsCompute ],
-    });
-
-    const pipelineLayoutAdamCompute = ctx.device.createPipelineLayout({
-        bindGroupLayouts: [ bindGroupLayoutAdamStepCompute ],
+    const pipelineLayoutCompute = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutCompute ],
     });
 
 
@@ -317,7 +296,7 @@ async function main() {
 
     const pipelineBackwardsCompute = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
-        layout: pipelineLayoutBackwardsCompute,
+        layout: pipelineLayoutCompute,
         compute: {
             module: csBackwardsModule,
         },
@@ -325,7 +304,7 @@ async function main() {
 
     const pipelineReduceCompute  = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
-        layout: pipelineLayoutBackwardsCompute,
+        layout: pipelineLayoutCompute,
         compute: {
             module: reduceModule,
         },
@@ -334,7 +313,7 @@ async function main() {
 
     const pipelineAdamCompute = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
-        layout: pipelineLayoutAdamCompute,
+        layout: pipelineLayoutCompute,
         compute: {
             module: adamModule,
         },
@@ -437,7 +416,7 @@ async function main() {
 
     // loss result buffer (atomic uint array)
     const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
-    const lossV = new Uint32Array(lossBuffDesc.size);
+    const lossV = new Float32Array(lossBuffDesc.size);
     ctx.device.queue.writeBuffer(lossBuffer, 0, lossV);
 
     const lossResultBuffer = ctx.device.createBuffer({
@@ -495,17 +474,8 @@ async function main() {
             { binding: 3, resource: lossBuffer },
             { binding: 4, resource: textureForward },
             { binding: 5, resource: gradientBuffer },
-        ]
-    });
-
-    const bindGroupAdam = ctx.device.createBindGroup({
-        label: 'bindGroup adam pass',
-        layout: pipelineAdamCompute.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: paramBuffer },
-            { binding: 1, resource: gradientBuffer },
-            { binding: 2, resource: adamMemBuffer},
-            { binding: 3, resource: uniBuff },
+            { binding: 6, resource: adamMemBuffer},
+            { binding: 7, resource: uniBuff },
         ]
     });
 
@@ -534,9 +504,9 @@ async function main() {
         // read loss output
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
-        lossData.push(result[0].valueOf());
+        lossData.push(...result.subarray(0, CONSTANTS.nSteps));
         const lastStep = lossSteps.at(-1) ?? 0;
-        lossSteps.push(lastStep + 1);
+        lossSteps.push(...[...Array(CONSTANTS.nSteps).keys()].map((v) => v + lastStep));
         
         lossPlot.setData([lossSteps, lossData]);
 
@@ -555,19 +525,19 @@ async function main() {
 
     let runGD = async () => {
         
-        const steps = 100;
+
         const start = performance.now();
         console.log("start");
 
         const encoder = ctx.device.createCommandEncoder({
             label: 'gd encoder',
         });
+        encoder.clearBuffer(lossBuffer, 0, lossBuffDesc.sizeBytes);
 
-        for(let i = 0; i < steps; i++) {
+        for(let i = 0; i < CONSTANTS.nSteps; i++) {
 
             // reset the gradients, maybe do this in the shader and not here?
             encoder.clearBuffer(gradientBuffer, 0, gradDesc.sizeBytes);
-            encoder.clearBuffer(lossBuffer, 0, lossBuffDesc.sizeBytes);
 
             const pass = encoder.beginComputePass({
                 label: 'simple backwards compute pass',
@@ -584,7 +554,6 @@ async function main() {
 
             // adam
             pass.setPipeline(pipelineAdamCompute);
-            pass.setBindGroup(0, bindGroupAdam);
             pass.dispatchWorkgroups(1);
 
             pass.end();
@@ -598,8 +567,9 @@ async function main() {
             passRender.end();
         }
 
-        // copy buffer to cpu (expensive! 0.1s)
+        // copy buffer to cpu (expensive!)
         encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+
         // run the work lmao
         const commandBuffer = encoder.finish();
         ctx.device.queue.submit([commandBuffer]);

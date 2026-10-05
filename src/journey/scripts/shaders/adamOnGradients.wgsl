@@ -5,18 +5,18 @@ struct Uniform {
 
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
-@group(0) @binding(1) var<storage, read_write> gradients: array<array<Grad, nGauss>>; 
-@group(0) @binding(2) var<storage, read_write> adamMemory : AdamMemory;
-@group(0) @binding(3) var<uniform> uniforms : Uniform;
+@group(0) @binding(5) var<storage, read_write> gradients: array<array<Grad, nGauss>>; 
+@group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(7) var<uniform> uniforms : Uniform;
 
 @compute @workgroup_size(nGauss, 1, 1)
 fn cs(@builtin(local_invocation_id) local_invocation_id: vec3u) {
 
     let n = f32(sampleDim * sampleDim);
     
-    // this is a issue / will not work! todo needs to be updated outside of the shader
     let i = local_invocation_id.x;
 
+    // a bit dumb but works
     if(i == 0) {
         adamMemory.t += 1u;
     }

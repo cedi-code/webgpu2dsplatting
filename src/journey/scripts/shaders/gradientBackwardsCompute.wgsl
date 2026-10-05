@@ -3,12 +3,14 @@
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
-@group(0) @binding(3) var<storage, read_write> lossOutput : array<atomic<u32>>;
+@group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
 @group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, nGauss>>; 
+@group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 
 
 var<workgroup> grad: array<AtomicGrad, nGauss>;
+var<workgroup> loss: atomic<u32>;
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
@@ -83,7 +85,7 @@ fn computeGD(
     let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
     let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
 
-    atomicAddf32_storage_u(&lossOutput[0], (1.0/n * Loss(gColor, color)));
+    atomicAddf32_workgroup_u(&loss, (Loss(gColor, color)));
 
     let colorGrad = vec3f(
         (gColor.r - colorPreMult.r),
@@ -107,4 +109,9 @@ fn computeGD(
     for(var i = nGauss-1; i >= 0; i--) {
         gradientChunks[chunk][i] = loadGrad(i);  
     }
+
+    // save loss into right chunk.
+    // bit ugly to use adam memory for this...
+    let lossStep = adamMemory.t % nSteps;
+    lossOutput[chunk][lossStep] = atomicLoadf32_workgroup_u(&loss);
 }
