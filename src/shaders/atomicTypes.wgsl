@@ -2,14 +2,9 @@
 const QUANTIZE_FACTOR: f32 = 32768.0;
 const DEQUANTIZE_FACTOR: f32 = 1.0 / 32768.0;
 
+const QUANTIZE_FACTOR_UNSIGNED: f32 = QUANTIZE_FACTOR * 2.0;
+const DEQUANTIZE_FACTOR_UNSIGNED: f32 = DEQUANTIZE_FACTOR * 0.5;
 
-struct AtomicGrad {  
-    pos: array<atomic<i32>, 2>,
-    scale: array<atomic<i32>, 2>,
-    rot: atomic<i32>,
-    color: array<atomic<i32>, 3>,
-    alpha: atomic<i32>,
-};
 
 fn atomicAddVec2f(ptr_val: ptr<storage, array<atomic<i32>, 2>, read_write>, value: vec2f) {
     let q = vec2i(value * QUANTIZE_FACTOR);
@@ -24,6 +19,11 @@ fn atomicAddVec3f(ptr_val: ptr<storage, array<atomic<i32>, 3>, read_write>, valu
     atomicAdd(&((*ptr_val)[2]), q.z);
 }
 
+fn atomicAddf32u(ptr_val: ptr<storage, atomic<u32>, read_write>, value: f32) {
+    let q = u32(value * QUANTIZE_FACTOR_UNSIGNED);
+    atomicAdd(ptr_val, q);
+}
+
 fn atomicAddf32(ptr_val: ptr<storage, atomic<i32>, read_write>, value: f32) {
     let q = i32(value * QUANTIZE_FACTOR);
     atomicAdd(ptr_val, q);
@@ -31,6 +31,10 @@ fn atomicAddf32(ptr_val: ptr<storage, atomic<i32>, read_write>, value: f32) {
 
 fn loadf32(p: ptr<storage, atomic<i32>, read_write>) -> f32 {
     return f32(atomicLoad(p)) * DEQUANTIZE_FACTOR;
+}
+
+fn loadf32u(p: ptr<storage, atomic<u32>, read_write>) -> f32 {
+    return f32(atomicLoad(p)) * DEQUANTIZE_FACTOR_UNSIGNED;
 }
 
 fn loadVec2f(p: ptr<storage, array<atomic<i32>, 2>, read_write>) -> vec2f {
