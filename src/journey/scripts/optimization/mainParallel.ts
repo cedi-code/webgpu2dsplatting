@@ -40,9 +40,6 @@ async function main() {
         return;
     }
 
-    console.log(ctx.canvas.width );
-    console.log(ctx.canvas.height);
-
     // constants
     const CONSTANTS = {
         NUM_GAUSS : 2,
@@ -70,10 +67,6 @@ async function main() {
             shaderCodeCompute
         ) 
     });
-
-    console.log(generateAtomicOperations());
-    console.log(shaderCodeCompute);
-
 
     const adamModule = ctx.device.createShaderModule({
         label: 'adam pass',
@@ -136,11 +129,14 @@ async function main() {
                         .add('alpha', "f32");
     const gradChunkDesc = gradientChunkBuilder.build();
 
+    // reduce uniform buffer
+    const reduceBuilder = new UniformBufferDescriptorBuilder('reduce uniform', "uniform");
+    const reduceUniDesc = reduceBuilder.add('stride', "u32").build();
+
     const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', CONSTANTS.nSteps * numChunks);
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
-    console.log(lossBuffDesc);
-    console.log(CONSTANTS.nSteps * numChunks);
+    console.log("loss array size:", CONSTANTS.nSteps * numChunks);
 
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
@@ -248,6 +244,19 @@ async function main() {
         ],
     });
 
+    const bindGroupLayoutReduce = ctx.device.createBindGroupLayout({
+        entries: [
+            { // uniforms
+            binding: 0,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'uniform',
+                minBindingSize: reduceUniDesc.sizeBytes,
+            }
+            },
+        ]
+    });
+
     
     const pipelineLayoutForward = ctx.device.createPipelineLayout({
         bindGroupLayouts: [ bindGroupLayoutDescriptorsForward ],
@@ -256,6 +265,10 @@ async function main() {
 
     const pipelineLayoutCompute = ctx.device.createPipelineLayout({
         bindGroupLayouts: [ bindGroupLayoutCompute ],
+    });
+
+    const pipelineLayoutComputeReduce = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutCompute, bindGroupLayoutReduce ],
     });
 
 
@@ -304,7 +317,7 @@ async function main() {
 
     const pipelineReduceCompute  = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
-        layout: pipelineLayoutCompute,
+        layout: pipelineLayoutComputeReduce,
         compute: {
             module: reduceModule,
         },
@@ -427,7 +440,7 @@ async function main() {
 
     const adamMemBuffer = bufferManager.createBuffer(adamMemoryDesc);
 
-    // not really nessesary? no, remove adam anyway soon
+    // adam memory
     const adamMemV = new Float32Array(adamMemoryDesc.size);
     ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
 
@@ -486,6 +499,28 @@ async function main() {
             { binding: 0, resource: paramBuffer },
         ]
     });
+
+    // create reduce bind groups?
+        // reduce buffer
+    let reduceBindGroups = [];
+    const reduceSteps = Math.ceil(Math.log2(numChunks));
+    for(let i = 0; i < reduceSteps; i++) {
+        const stride = 2 ** i;
+        const reduceUniBuffer = bufferManager.createBuffer(reduceUniDesc);
+        ctx.device.queue.writeBuffer(reduceUniBuffer, 0, new Uint32Array([stride]));
+
+        reduceBindGroups.push(
+            ctx.device.createBindGroup({
+                label: `bindGroup-${i} for reduce`,
+                layout: pipelineReduceCompute.getBindGroupLayout(1),
+                entries: [
+                    { binding: 0, resource: reduceUniBuffer },
+                ]
+            })
+        );
+    }
+    
+    
 
     type Output = {
         initalQ : number,
@@ -550,7 +585,13 @@ async function main() {
 
             // reduce
             pass.setPipeline(pipelineReduceCompute)
-            pass.dispatchWorkgroups(1);
+            let stride = numChunks;
+            reduceBindGroups.forEach(bindGroup => {
+                pass.setBindGroup(1, bindGroup);
+                const reduceCount = Math.floor(stride / 2);
+                stride -= reduceCount;
+                pass.dispatchWorkgroups(reduceCount);
+            });
 
             // adam
             pass.setPipeline(pipelineAdamCompute);
@@ -574,9 +615,6 @@ async function main() {
         const commandBuffer = encoder.finish();
         ctx.device.queue.submit([commandBuffer]);
         
-        // get loss
-        await updateLossResults();
-
         // display on canvas
         ctx.renderPassDescriptor = renderPassDescriptorScreen;
         render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
@@ -585,7 +623,9 @@ async function main() {
 
         let elapsed = performance.now() - start;
         console.log("elapsed time:", elapsed / 1000.0);
-        prtyPrint(input);        
+
+        // get loss
+        await updateLossResults();      
     }
     // == interactive suff, not really needed
     {
