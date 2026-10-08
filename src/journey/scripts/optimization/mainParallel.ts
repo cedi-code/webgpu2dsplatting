@@ -42,7 +42,7 @@ async function main() {
 
     // constants
     const CONSTANTS = {
-        NUM_GAUSS : 2,
+        NUM_SPLATS : 2,
         xRAY : false,
         nGauss : 2,
         sampleDim : 128,

@@ -12,12 +12,12 @@ struct Unfirom {
 @group(0) @binding(5) var<storage, read_write> adamMemory : MyAdamMemory;
 
 // only for adam grad
-const NUM_GAUSS = 1;
+const NUM_SPLATS = 1;
 
 struct MyAdamMemory {
     t : u32,
-    m : array<GradGauss, NUM_GAUSS>,
-    v : array<GradGauss, NUM_GAUSS>,
+    m : array<GradGauss, NUM_SPLATS>,
+    v : array<GradGauss, NUM_SPLATS>,
 }
 
 
@@ -98,7 +98,7 @@ fn GradLoss(
         adamMemory.t += 1u;
         var moment = adamMemory.m;
         var varian = adamMemory.v;
-        var gradientAdam = array<GradGauss, NUM_GAUSS>(gradients);
+        var gradientAdam = array<GradGauss, NUM_SPLATS>(gradients);
         // ugly hardcoded adam memory holder        
         adamStepGradGauss(uniforms.adamP, f32(adamMemory.t), &moment, &varian, &gradientAdam);
         adamMemory.m = moment;

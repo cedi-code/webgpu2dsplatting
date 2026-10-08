@@ -1,5 +1,5 @@
 // constants
-const NUM_GAUSS = 2;
+const NUM_SPLATS = 2;
 const xRAY = false;
 
 

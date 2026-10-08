@@ -8,22 +8,22 @@ struct AdamParams {
 // todo, adam-memory should NOT EXIST when done correctly / should be allocated with adamInit
 struct AdamMemory {
     t : u32,
-    m : array<Grad, NUM_GAUSS>,
-    v : array<Grad, NUM_GAUSS>,
+    m : array<Grad, NUM_SPLATS>,
+    v : array<Grad, NUM_SPLATS>,
 }
 
 
 fn adamStepGradGauss(
     p : AdamParams, 
     t : f32,
-    momentum : ptr<function, array<GradGauss, NUM_GAUSS>>,
-    variance : ptr<function, array<GradGauss, NUM_GAUSS>>,
-    grad   : ptr<function, array<GradGauss, NUM_GAUSS>>, // by copy for now
+    momentum : ptr<function, array<GradGauss, NUM_SPLATS>>,
+    variance : ptr<function, array<GradGauss, NUM_SPLATS>>,
+    grad   : ptr<function, array<GradGauss, NUM_SPLATS>>, // by copy for now
     ) 
 {
     let alpha_t = p.lr * sqrt((1.0 - pow(p.b2, t)))/(1.0-pow(p.b1, t));
 
-    for(var i = 0; i < NUM_GAUSS; i++) {
+    for(var i = 0; i < NUM_SPLATS; i++) {
 
         let mPos = &((*momentum)[i].pos);
         let vPos = &((*variance)[i].pos);
