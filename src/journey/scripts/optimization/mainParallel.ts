@@ -18,6 +18,8 @@ import adamShad from '../../../shaders/adam.wgsl?raw';
 import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
 import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
 import reduceCompute from '../shaders/reduceGradients.wgsl?raw';
+import radixSetup from '../shaders/radixSetup.wgsl?raw';
+import radixCompute from '../shaders/radixSort.wgsl?raw';
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -42,15 +44,23 @@ async function main() {
 
     // number of splats
     const numSplats = 2; // hard limit is 1 splat per pixel?
+    const sampleDim = 128;
+    const chunkWidth = 16;
+    const chunkHeight = 16;
+    const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
+    const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
+    const numChunks = chunksX * chunksY;
 
     // constants
     const CONSTANTS = {
         NUM_SPLATS : numSplats,
         xRAY : false,
-        sampleDim : 128,
+        sampleDim : sampleDim,
         EPSILON : MACHINE_EPSILON,
-        chunkWidth: 16,
-        chunkHeight: 16,
+        chunkWidth: chunkWidth,
+        chunkHeight: chunkHeight,
+        numChunksW : chunksX,
+        numChunksH : chunksY,
         nSteps : 100,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
         MAX_SLOTS: numSplats * 2 * 256, // i imagine ther cant be more than 256 splats for a 16x16 patch
@@ -83,6 +93,24 @@ async function main() {
         ) 
     });
 
+    const radixSetupModule = ctx.device.createShaderModule({
+        label: 'radix setup pass',
+        code: (
+            sharedConstants + 
+            shaderGradTypes + 
+            shaderGaussFunctions +
+            radixSetup
+        ) 
+    });
+
+    const radixModule = ctx.device.createShaderModule({
+        label: 'radix pass',
+        code: (
+            sharedConstants +
+            radixCompute
+        )
+    });
+
     const reduceModule = ctx.device.createShaderModule({
         label: 'reduce pass',
         code: (
@@ -107,7 +135,6 @@ async function main() {
         label: 'simple texture frag impl',
         code: (gaussFrag) 
     });
-    
 
 
     const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numSplats);
@@ -117,11 +144,6 @@ async function main() {
                 .add('color', "vec3f")
                 .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
-
-    // would be cool if i can test that..
-    const chunksX = Math.round(((CONSTANTS.sampleDim + CONSTANTS.chunkWidth - 1)  / CONSTANTS.chunkWidth));
-    const chunksY = Math.round(((CONSTANTS.sampleDim + CONSTANTS.chunkHeight - 1)  / CONSTANTS.chunkHeight));
-    const numChunks = chunksX * chunksY;
 
     // i still cant do arrays of structs...
     const gradientChunkBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numChunks * numSplats);
@@ -162,7 +184,8 @@ async function main() {
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
     radixBuild.add("currI", "u32")
-              .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS });
+              .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS })
+              .add("offsets", { type : "u32", size: numChunks });
 
     const radixDesc = radixBuild.build();
         
@@ -279,7 +302,6 @@ async function main() {
         bindGroupLayouts: [ bindGroupLayoutDescriptorsForward ],
     });
 
-
     const pipelineLayoutCompute = ctx.device.createPipelineLayout({
         bindGroupLayouts: [ bindGroupLayoutCompute ],
     });
@@ -322,6 +344,22 @@ async function main() {
             depthCompare: 'less',
             format: 'depth24plus',
         }
+    });
+
+    const pipelineRadixSetup = ctx.device.createComputePipeline({
+        label: 'radix setup pipeline',
+        layout: pipelineLayoutCompute,
+        compute: {
+            module: radixSetupModule,
+        },
+    });
+
+    const pipelineRadix = ctx.device.createComputePipeline({
+        label: 'radix compute pipeline',
+        layout: pipelineLayoutCompute,
+        compute: {
+            module: radixModule,
+        },
     });
 
     const pipelineBackwardsCompute = ctx.device.createComputePipeline({
@@ -602,9 +640,18 @@ async function main() {
                 label: 'simple backwards compute pass',
             });
 
+            // radix setup
+            pass.setPipeline(pipelineRadixSetup);
+            pass.setBindGroup(0, bindGroupBackwards);
+            pass.dispatchWorkgroups(Math.floor(numSplats / 256) + 1);
+
+            // radix sort
+            pass.setPipeline(pipelineRadix);
+            pass.dispatchWorkgroups(1); // TODO no clue how many instances it needs lmao
+
+
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
-            pass.setBindGroup(0, bindGroupBackwards);
             pass.dispatchWorkgroups(chunksX, chunksY);
 
             // reduce

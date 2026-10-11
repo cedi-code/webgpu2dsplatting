@@ -1,4 +1,4 @@
-const tile = array<vec2f, 6>(
+const tile = array<vec2f, 4>(
     // triangle 1
     vec2f( -1.0,  1.0),  // left top
     vec2f( -1.0,  -1.0), // left bottom
@@ -6,12 +6,10 @@ const tile = array<vec2f, 6>(
     vec2f( 1.0,  1.0),   // right top
 );
 
-const numBoxesW = u32(( (sampleDim) + chunkWidth - 1) / chunkWidth); // (sampleDim is suqare, and + chunkWidht-1, rounds it up)
-const numBoxesH = u32(( (sampleDim) + chunkHeight - 1) / chunkHeight); // (sampleDim is suqare, and + chunkWidht-1, rounds it up)
-
 struct RadixMemory {
     currI : atomic<u32>,
     data : array<u32, MAX_SLOTS>,
+    offsets : array<u32, numChunksW * numChunksH>
 };
 
 @group(0) @binding(0) var<storage, read_write> splats : array<Params, NUM_SPLATS>;
@@ -20,16 +18,20 @@ struct RadixMemory {
 fn ndcToBCords(pos : vec2f) -> vec2u {
     let posNorm = (pos * vec2f(2.0, -2.0) - vec2f(1.0, -1.0)); 
     return vec2u(
-        clamp(u32(posNorm.x * f32(numBoxesW)), 0u, numBoxesW-1u),
-        clamp(u32(posNorm.y * f32(numBoxesH)), 0u, numBoxesH-1u)
+        clamp(u32(posNorm.x * f32(numChunksW)), 0u, numChunksW-1u),
+        clamp(u32(posNorm.y * f32(numChunksH)), 0u, numChunksH-1u)
     );
 }
 
-// NUM_SPLATS % 256 invocations
-@workgroup(256,1,1)
+// NUM_SPLATS / 256 invocations
+@compute @workgroup_size(256, 1, 1)
 fn registerSplats(
         @builtin(global_invocation_id) global_invocation_id : vec3u,
 ) {
+
+    if(global_invocation_id.x >= NUM_SPLATS) {
+        return;
+    }
 
     let splat = splats[global_invocation_id.x];
 
@@ -54,8 +56,8 @@ fn registerSplats(
 
     // write down the key value pairs
     for(var j = minY; j < maxY+1; j++) {
-        for(var k = minX; l < maxX+1; k++) {
-            let boxI = (j * numBoxesW) + k;
+        for(var k = minX; k < maxX+1; k++) {
+            let boxI = (j * numChunksW) + k;
 
             // splat id
             radixMem.data[currOff] = global_invocation_id.x; 
