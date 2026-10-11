@@ -3,13 +3,13 @@ struct Uniforms {
 };
 
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
-@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, nGauss>>; 
+@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, NUM_SPLATS>>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 
 @group(1) @binding(0) var<uniform> uni : Uniforms;
 
 
-@compute @workgroup_size(nGauss, 1, 1)
+@compute @workgroup_size(NUM_SPLATS, 1, 1)
 fn cs(
   @builtin(local_invocation_id) local_invocation_id: vec3u,
   @builtin(workgroup_id) workgroup_id : vec3u

@@ -72,9 +72,7 @@ fn GradLoss(
     let n = f32(size.y * size.x);
     let sizeSample = vec2f(size);
     
-    const nGauss = 2;
-
-    var gradients = array<Grad, nGauss>();
+    var gradients = array<Grad, NUM_SPLATS>();
 
     // loss + backwards pass
     var currLoss = 0.0;
@@ -96,7 +94,7 @@ fn GradLoss(
 
             var oneMinusAlpha = 1.0;
             var background = gColor.rgb;
-            for(var i = nGauss-1; i >= 0; i--) {
+            for(var i = NUM_SPLATS-1; i >= 0; i--) {
                 // params
                 GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha, &gradients);                     
             }
@@ -106,7 +104,7 @@ fn GradLoss(
     currLoss /= n;
     lossOutput[0] = currLoss;
 
-    for(var i = 0; i < nGauss; i++) {
+    for(var i = 0; i < NUM_SPLATS; i++) {
         
         gradients[i].pos    /= n;
         gradients[i].scale  /= n;
@@ -120,13 +118,13 @@ fn GradLoss(
         adamMemory.t += 1u;
         var moment = adamMemory.m;
         var varian = adamMemory.v;
-        for(var i = 0; i < nGauss; i++) {
+        for(var i = 0; i < NUM_SPLATS; i++) {
             adamStepGrad(uniforms.adamP, f32(adamMemory.t), &moment[i], &varian[i], &gradients[i]);
         }
         adamMemory.m = moment;
         adamMemory.v = varian;
 
-        for(var i = 0; i < nGauss; i++) {
+        for(var i = 0; i < NUM_SPLATS; i++) {
 
             let initalParams = output[i];
 

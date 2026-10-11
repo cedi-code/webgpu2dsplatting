@@ -40,16 +40,20 @@ async function main() {
         return;
     }
 
+    // number of splats
+    const numSplats = 2; // hard limit is 1 splat per pixel?
+
     // constants
     const CONSTANTS = {
-        NUM_SPLATS : 2,
+        NUM_SPLATS : numSplats,
         xRAY : false,
-        nGauss : 2,
         sampleDim : 128,
         EPSILON : MACHINE_EPSILON,
         chunkWidth: 16,
         chunkHeight: 16,
         nSteps : 100,
+        // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
+        MAX_SLOTS: numSplats * 2 * 256, // i imagine ther cant be more than 256 splats for a 16x16 patch
     };
 
     const sharedConstants = Object.entries(CONSTANTS)
@@ -104,8 +108,7 @@ async function main() {
         code: (gaussFrag) 
     });
     
-    // number of splats
-    const numSplats = 2;
+
 
     const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numSplats);
     paramBuilder.add('pos', "vec2f")
@@ -156,6 +159,12 @@ async function main() {
             .add('b2', "f32")
             .add('eps', "f32");    
     const uniDesc = uniBuild.build();
+
+    const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
+    radixBuild.add("currI", "u32")
+              .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS });
+
+    const radixDesc = radixBuild.build();
         
     // == defining the binding layouts
     const bindGroupLayoutDescriptorsForward = ctx.device.createBindGroupLayout(
@@ -239,6 +248,14 @@ async function main() {
             buffer: {
                 type: 'uniform',
                 minBindingSize: uniDesc.sizeBytes,
+            }
+            },
+            { // radix memory
+            binding: 8,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: radixDesc.sizeBytes,
             }
             },
         ],
@@ -456,6 +473,12 @@ async function main() {
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniVal , 0);
 
+    // radix buffer setup
+
+    const radixBuff = bufferManager.createBuffer(radixDesc);
+    const radixV = new Uint32Array(radixDesc.size);
+    const radixCounter = new Uint32Array(1);
+    ctx.device.queue.writeBuffer(radixBuff, 0, radixCounter, 0);
     // == texture stuff
 
     const testImageUrl = 'assets/overlappImage.jpg';
@@ -475,8 +498,8 @@ async function main() {
 
     const sampler = ctx.device.createSampler();
 
-    // ==
 
+    // ==
     const bindGroupBackwards = ctx.device.createBindGroup({
         label: 'bindGroup backwards pass',
         layout: pipelineBackwardsCompute.getBindGroupLayout(0),
@@ -489,6 +512,7 @@ async function main() {
             { binding: 5, resource: gradientBuffer },
             { binding: 6, resource: adamMemBuffer},
             { binding: 7, resource: uniBuff },
+            { binding: 8, resource: radixBuff },
         ]
     });
 

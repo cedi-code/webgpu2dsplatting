@@ -5,11 +5,11 @@
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
-@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, nGauss>>; 
+@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, NUM_SPLATS>>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 
 
-var<workgroup> grad: array<AtomicGrad, nGauss>;
+var<workgroup> grad: array<AtomicGrad, NUM_SPLATS>;
 var<workgroup> loss: atomic<u32>;
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
@@ -95,7 +95,7 @@ fn computeGD(
 
     var oneMinusAlpha = 1.0;
     var background = gColor.rgb;
-    for(var i = nGauss-1; i >= 0; i--) {
+    for(var i = NUM_SPLATS-1; i >= 0; i--) {
         // params
         GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha);                     
     }
@@ -103,10 +103,10 @@ fn computeGD(
     workgroupBarrier();
 
     // save atomic grads into storage buffer.
-    let chunkAcross = (u32(sampleDim) + chunkWidth - 1) / chunkWidth; // (sampleDim is suqare, and + chunkWidht-1, rounds it up)
+    let chunkAcross = u32(( (sampleDim) + chunkWidth - 1) / chunkWidth); // (sampleDim is suqare, and + chunkWidht-1, rounds it up)
     let chunk = workgroup_id.y * chunkAcross + workgroup_id.x;
 
-    for(var i = nGauss-1; i >= 0; i--) {
+    for(var i = NUM_SPLATS-1; i >= 0; i--) {
         gradientChunks[chunk][i] = loadGrad(i);  
     }
 

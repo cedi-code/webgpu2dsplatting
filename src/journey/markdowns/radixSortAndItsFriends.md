@@ -55,7 +55,33 @@ the splats are then stored into a array which is sorted by boxes, so the boxes i
 
 We basically want get this:
 $$
-\{ (i, (k,j)) \quad | g_i(p_{k,j}) > \epsilon  \}
+\{ (i, (k,j)) \quad | \quad g_i(p_{k,j}) > \epsilon \quad  \}
 $$
 
 and we want it to be sorted by $(k,j)$
+
+we run a workgroup for each splat
+and have the following struct:
+
+```wgsl
+struct radixMemory {
+    data : array<u32, MAX_SLOTS>,
+    currI : atomic<u32>,
+};
+@group(0) @binding(0) var<storage, read_write> splats: array<Params>;
+// NUM_SPLATS % 256 invocations
+@workgroup(256,1,1)
+
+fn registerSplats(
+        @builtin(global_invocation_id) global_invocation_id : vec3u,
+) {
+    let gaussP = splat[i];
+
+    // get the left, right, top, bottom most points of gaussian
+
+    // grab the current index and increase it by bbox
+
+    // write down the key value pairs
+
+}
+```
