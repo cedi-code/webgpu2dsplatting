@@ -11,5 +11,11 @@ struct RadixMemory {
 @compute @workgroup_size(256, 1, 1)
 fn radixSort() {
 
-    // do special bucket sort!
+    // write the number in base 2^8 = 256
+
+    // count how many elements there are per bucket
+
+    // do prefix sum to know the offsets of the bucket
+
+    // store data into the result buffer using count bucket
 }

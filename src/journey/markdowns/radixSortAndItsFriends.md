@@ -85,3 +85,19 @@ fn registerSplats(
 
 }
 ```
+### SetupBox better
+
+we can do better...
+our splats are already orderd by depth, so leaving it to a atomic currI we have to resort the depth!
+
+instead when we write our key value pairs, we want to already do that in order of the splats
+
+```
+(1, _), (1, _), (2, _), (2, _), ..., (M, _) 
+```
+
+1. Count: Calculate the number of boxes each splat covers
+
+2. Scan: Run a prefix sum over those counts. This gives each splat the exact  starting offset for the radix array of key-value pairs
+
+3. Write: write down the key value pairs starting from the prefix sum offset.

@@ -52,6 +52,17 @@ fn registerSplats(
 
     // grab the current index and increase it by bbox
     let allocate = 2u * (minX - maxX + 1) * (minY - maxY + 1);
+
+    // store allocate into  workgroup memory and wait
+
+    // prefix sum with 8 barriers
+
+    // store total sum in a storage buffer
+
+    // another dispatch recalculates the prefix sum and corrects the offsets by total sums in the offsets
+
+    // then we write into radix sort memory
+
     var currOff = atomicAdd(&radixMem.currI, allocate);
 
     // write down the key value pairs
