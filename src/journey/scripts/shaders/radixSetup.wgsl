@@ -1,3 +1,9 @@
+struct RadixMemory {
+    splatOffsets : array<u32, NUM_DISPATCHES>,
+    data : array<u32, MAX_SLOTS>,
+    offsets : array<u32, numChunksW * numChunksH>
+};
+
 const tile = array<vec2f, 4>(
     // triangle 1
     vec2f( -1.0,  1.0),  // left top
@@ -6,14 +12,8 @@ const tile = array<vec2f, 4>(
     vec2f( 1.0,  1.0),   // right top
 );
 
-struct RadixMemory {
-    currI : atomic<u32>,
-    data : array<u32, MAX_SLOTS>,
-    offsets : array<u32, numChunksW * numChunksH>
-};
-
-@group(0) @binding(0) var<storage, read_write> splats : array<Params, NUM_SPLATS>;
-@group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
+// preferably power of 2!
+const NUM_256 = (NUM_DISPATCHES + GROUPSIZE - 1u) / GROUPSIZE;
 
 fn ndcToBCords(pos : vec2f) -> vec2u {
     let posNorm = (pos * vec2f(2.0, -2.0) - vec2f(1.0, -1.0)); 
@@ -23,17 +23,17 @@ fn ndcToBCords(pos : vec2f) -> vec2u {
     );
 }
 
-// NUM_SPLATS / 256 invocations
-@compute @workgroup_size(256, 1, 1)
-fn registerSplats(
-        @builtin(global_invocation_id) global_invocation_id : vec3u,
-) {
+struct SplatInfo {
+    allocate: u32,
+    bounds: vec4<u32>,
+}
 
-    if(global_invocation_id.x >= NUM_SPLATS) {
-        return;
+fn getSplatInfo(global_id: u32) -> SplatInfo {
+    if (global_id >= NUM_SPLATS) {
+        return SplatInfo(0u, vec4(0)); // out-of-bounds threads return 0
     }
 
-    let splat = splats[global_invocation_id.x];
+    let splat = splats[global_id];
 
     // get the left, right, top, bottom most points of gaussian
     let R : mat2x2f = rotMat(splat.rot);
@@ -53,23 +53,78 @@ fn registerSplats(
     // grab the current index and increase it by bbox
     let allocate = 2u * (minX - maxX + 1) * (minY - maxY + 1);
 
+    return SplatInfo(allocate, vec4u(minX, maxX, minY, maxY));
+}
+
+
+@group(0) @binding(0) var<storage, read_write> splats : array<Params, NUM_SPLATS>;
+@group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
+
+override first_pass: bool;
+var<workgroup> sums: array<u32, GROUPSIZE>;
+var<workgroup> groupOffset : atomic<u32>;
+
+// NUM_SPLATS / 256 invocations
+@compute @workgroup_size(GROUPSIZE, 1, 1)
+fn registerSplats(
+        @builtin(global_invocation_id) global_invocation_id : vec3u,
+        @builtin(local_invocation_id) local_invocation_id : vec3u,
+        @builtin(workgroup_id) workgroup_id: vec3u,
+) {
+    
+    let local_id = local_invocation_id.x;
+    let splatInfo = getSplatInfo(global_invocation_id.x);
+
     // store allocate into  workgroup memory and wait
+    sums[workgroup_id.x] = splatInfo.allocate;
+    workgroupBarrier();
 
     // prefix sum with 8 barriers
+    for(var i = 0u; i < BARRIERS; i++) {
 
-    // store total sum in a storage buffer
+        let chunk_size = (2u << i);
+        let chunk_id = local_id % chunk_size;
+        let half_chunk = chunk_size >> 1;
 
+        if(chunk_id >= half_chunk) {
+
+            let chunk_start = (local_id - chunk_id) ;
+            let chunk_read_id = chunk_start + half_chunk - 1u;
+            sums[local_id] += sums[chunk_read_id];
+        }
+        workgroupBarrier();
+    }
+
+    if(first_pass) {
+        // store total sum in a storage buffer
+        if(local_id == GROUPSIZE - 1) { // last thread does it
+            radixMem.splatOffsets[workgroup_id.x] = sums[local_id];
+        }
+        return; // stops here
+    }
+    
     // another dispatch recalculates the prefix sum and corrects the offsets by total sums in the offsets
+    for(var i = 0u; i < NUM_256; i++) {
+        let dispatchId = local_id + GROUPSIZE * i;
+        if(dispatchId >= workgroup_id.x) {
+            break;
+        }
+        atomicAdd(&groupOffset, radixMem.splatOffsets[dispatchId]);
+    }
+    workgroupBarrier();
 
     // then we write into radix sort memory
-
-    var currOff = atomicAdd(&radixMem.currI, allocate);
+    var currOff = atomicLoad(&groupOffset) + sums[local_id];
 
     // write down the key value pairs
+    let minX = splatInfo.bounds[0];
+    let maxX = splatInfo.bounds[1];
+    let minY = splatInfo.bounds[2];
+    let maxY = splatInfo.bounds[3];
+
     for(var j = minY; j < maxY+1; j++) {
         for(var k = minX; k < maxX+1; k++) {
             let boxI = (j * numChunksW) + k;
-
             // splat id
             radixMem.data[currOff] = global_invocation_id.x; 
             // box id

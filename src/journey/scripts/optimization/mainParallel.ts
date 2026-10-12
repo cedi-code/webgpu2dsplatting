@@ -51,6 +51,10 @@ async function main() {
     const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
     const numChunks = chunksX * chunksY;
 
+    const groupSizeRadix = 256;
+    const barriersPrefixSum = 8; // log2(groupSizeRadix)
+    const radixSetupDispatches = Math.floor((numSplats + groupSizeRadix - 1) / groupSizeRadix);
+
     // constants
     const CONSTANTS = {
         NUM_SPLATS : numSplats,
@@ -64,6 +68,9 @@ async function main() {
         nSteps : 100,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
         MAX_SLOTS: numSplats * 2 * 256, // i imagine ther cant be more than 256 splats for a 16x16 patch
+        GROUPSIZE: groupSizeRadix,
+        BARRIERS: barriersPrefixSum,
+        NUM_DISPATCHES : radixSetupDispatches,
     };
 
     const sharedConstants = Object.entries(CONSTANTS)
@@ -183,7 +190,7 @@ async function main() {
     const uniDesc = uniBuild.build();
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
-    radixBuild.add("currI", "u32")
+    radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
               .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS })
               .add("offsets", { type : "u32", size: numChunks });
 
@@ -346,14 +353,29 @@ async function main() {
         }
     });
 
-    const pipelineRadixSetup = ctx.device.createComputePipeline({
+    const pipelineRadixSetup1 = ctx.device.createComputePipeline({
         label: 'radix setup pipeline',
         layout: pipelineLayoutCompute,
         compute: {
             module: radixSetupModule,
+            entryPoint: 'registerSplats',
+            constants: {
+                first_pass: 1,
+            }
         },
     });
 
+    const pipelineRadixSetup2 = ctx.device.createComputePipeline({
+        label: 'radix setup pipeline',
+        layout: pipelineLayoutCompute,
+        compute: {
+            module: radixSetupModule,
+            entryPoint: 'registerSplats',
+            constants: {
+                first_pass: 1,
+            }
+        },
+    });
     const pipelineRadix = ctx.device.createComputePipeline({
         label: 'radix compute pipeline',
         layout: pipelineLayoutCompute,
@@ -515,8 +537,8 @@ async function main() {
 
     const radixBuff = bufferManager.createBuffer(radixDesc);
     const radixV = new Uint32Array(radixDesc.size);
-    const radixCounter = new Uint32Array(1);
-    ctx.device.queue.writeBuffer(radixBuff, 0, radixCounter, 0);
+    const radixCounters = new Uint32Array(radixDesc.attributes[1].offset);
+    ctx.device.queue.writeBuffer(radixBuff, 0, radixCounters, 0);
     // == texture stuff
 
     const testImageUrl = 'assets/overlappImage.jpg';
@@ -641,9 +663,14 @@ async function main() {
             });
 
             // radix setup
-            pass.setPipeline(pipelineRadixSetup);
+            pass.setPipeline(pipelineRadixSetup1);
             pass.setBindGroup(0, bindGroupBackwards);
-            pass.dispatchWorkgroups(Math.floor(numSplats / 256) + 1);
+            pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+            // again the same thing
+            pass.setPipeline(pipelineRadixSetup2);
+            pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+
+            // todo, read out the RadixMemory.data!
 
             // radix sort
             pass.setPipeline(pipelineRadix);
@@ -658,7 +685,7 @@ async function main() {
             pass.setPipeline(pipelineReduceCompute)
             let stride = numChunks;
             reduceBindGroups.forEach(bindGroup => {
-                pass.setBindGroup(1, bindGroup);
+                pass.setBindGroup(1, bindGroup); // instead of a overwrite, create stride pipelines?
                 const reduceCount = Math.floor(stride / 2);
                 stride -= reduceCount;
                 pass.dispatchWorkgroups(reduceCount);
