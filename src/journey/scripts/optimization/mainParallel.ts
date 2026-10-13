@@ -67,7 +67,7 @@ async function main() {
         numChunksH : chunksY,
         nSteps : 1,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
-        MAX_SLOTS: numSplats * 2 * 256, // i imagine ther cant be more than 256 splats for a 16x16 patch
+        MAX_SLOTS: numChunks * 2 * 2, // i imagine there cant be more than 256 splats for a 16x16 patch
         GROUPSIZE: groupSizeRadix,
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
@@ -194,6 +194,7 @@ async function main() {
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
     radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
               .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS })
+              .add("data2", { type : "u32", size: CONSTANTS.MAX_SLOTS })
               .add("offsets", { type : "u32", size: numChunks });
 
     const radixDesc = radixBuild.build();
@@ -693,7 +694,7 @@ async function main() {
 
             // radix sort
             pass.setPipeline(pipelineRadix);
-            pass.dispatchWorkgroups(1); // TODO no clue how many instances it needs lmao
+            pass.dispatchWorkgroups(1); // only one instance, this could be improved! with using storage buffers more?
 
 
             // backwards

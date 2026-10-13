@@ -1,5 +1,6 @@
 struct RadixMemory {
     splatOffsets : array<u32, NUM_DISPATCHES>,
+    data2 : array<u32, MAX_SLOTS>,
     data : array<u32, MAX_SLOTS>,
     offsets : array<u32, numChunksW * numChunksH>
 };
@@ -131,7 +132,7 @@ fn registerSplats(
             // box id
             radixMem.data[currOff] = boxI;
             // splat id
-            radixMem.data[currOff + 1] = global_invocation_id.x + 1; 
+            radixMem.data[currOff + 1] = global_invocation_id.x; 
             currOff += 2;
         }
     }
