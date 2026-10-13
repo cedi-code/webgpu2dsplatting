@@ -1,15 +1,21 @@
-
+struct RadixMemory {
+    splatOffsets : array<u32, NUM_DISPATCHES>,
+    offsets : array<u32, numChunksW * numChunksH>,
+    data2 : array<u32, MAX_SLOTS>,
+    data : array<u32, MAX_SLOTS>,
+};
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
-@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, NUM_SPLATS>>; 
+@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, MAX_SPLATS_CHUNK>>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
 
-var<workgroup> grad: array<AtomicGrad, NUM_SPLATS>;
+var<workgroup> grad: array<AtomicGrad, MAX_SPLATS_CHUNK>;
 var<workgroup> loss: atomic<u32>;
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
@@ -21,14 +27,13 @@ fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
 }
 
 fn GradLoss(
-    param : ptr<storage, array<Params>, read_write>, // should not be read_write!
-    i : i32, 
+    p : Params,
+    i : u32,
     x: vec2f, 
     colorDiff : vec3f,
     background : ptr<function, vec3f>,
     oneMinusAlpha : ptr<function, f32>,
-    ) {
-    let p = param[i]; 
+    ) {    
     let gaussP = GaussParams(p.pos, p.scale, p.rot);
     let gauss = g(gaussP,x);
 
@@ -59,7 +64,7 @@ fn GradLoss(
     (*oneMinusAlpha) *= (1.0 - alpha * gauss);
 }
 
-fn loadGrad(i : i32) -> Grad {
+fn loadGrad(i : u32) -> Grad {
     var g: Grad;
     g.pos   = atomicLoadvec2f_workgroup(&(grad[i].pos));
     g.scale = atomicLoadvec2f_workgroup(&(grad[i].scale));
@@ -75,39 +80,52 @@ fn computeGD(
     @builtin(global_invocation_id) global_invocation_id : vec3u,
     @builtin(workgroup_id) workgroup_id: vec3u,
 ) {
-
-    let n = f32(sampleDim * sampleDim);
-    // loss + backwards pass
-    let sizeSample = vec2f(sampleDim);
-    let uv = vec2f(global_invocation_id.xy) / sizeSample;
-    let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
-    let colorPreMult = vec4f(color.rgb * color.a, color.a);
-    let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
-    let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
-
-    atomicAddf32_workgroup_u(&loss, (Loss(gColor, color)));
-
-    let colorGrad = vec3f(
-        (gColor.r - colorPreMult.r),
-        (gColor.g - colorPreMult.g),
-        (gColor.b - colorPreMult.b),
-    );
-
-    var oneMinusAlpha = 1.0;
-    var background = gColor.rgb;
-    for(var i = NUM_SPLATS-1; i >= 0; i--) {
-        // params
-        GradLoss(&output, i, uv, colorGrad, &background, &oneMinusAlpha);                     
-    }
-
-    workgroupBarrier();
-
-    // save atomic grads into storage buffer.
     let chunkAcross = u32(( (sampleDim) + chunkWidth - 1) / chunkWidth); // (sampleDim is suqare, and + chunkWidht-1, rounds it up)
     let chunk = workgroup_id.y * chunkAcross + workgroup_id.x;
 
-    for(var i = NUM_SPLATS-1; i >= 0; i--) {
-        gradientChunks[chunk][i] = loadGrad(i);  
+    let offData = radixMem.offsets[chunk];
+    let prevOff = select(0u, radixMem.offsets[chunk-1u], chunk > 0u);
+    let numSplats = min((offData - prevOff), MAX_SPLATS_CHUNK); // if for some reason there are more, we just have to ignore them? :(
+
+    if(numSplats == 0u) {
+        // do nothing
+    }
+    else {
+        let n = f32(sampleDim * sampleDim);
+        // loss + backwards pass
+        let sizeSample = vec2f(sampleDim);
+        let uv = vec2f(global_invocation_id.xy) / sizeSample;
+        let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
+        let colorPreMult = vec4f(color.rgb * color.a, color.a);
+        let gColorRaw = textureSampleLevel(forwardTexture, ourSampler, uv, 0.0);
+        let gColor = vec4f(gColorRaw.rgb * gColorRaw.a, gColorRaw.a);
+
+        atomicAddf32_workgroup_u(&loss, (Loss(gColor, color)));
+
+        let colorGrad = vec3f(
+            (gColor.r - colorPreMult.r),
+            (gColor.g - colorPreMult.g),
+            (gColor.b - colorPreMult.b),
+        );
+
+        var oneMinusAlpha = 1.0;
+        var background = gColor.rgb;
+        for(var i = numSplats; i > 0u; i--) {
+            // params
+            let off = (prevOff + i - 1u);
+            let splatId = radixMem.data2[2u * off + 1u];
+            GradLoss(output[splatId], i-1u, uv, colorGrad, &background, &oneMinusAlpha);                     
+        }
+    }
+    workgroupBarrier();
+
+    if(numSplats == 0u) {
+        return;
+    }
+
+    // save atomic grads into storage buffer.
+    for(var i = numSplats; i > 0; i--) {
+        gradientChunks[chunk][i-1u] = loadGrad(i-1u);  
     }
 
     // save loss into right chunk.

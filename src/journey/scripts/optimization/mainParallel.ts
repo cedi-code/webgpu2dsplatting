@@ -54,6 +54,7 @@ async function main() {
     const groupSizeRadix = 256;
     const barriersPrefixSum = 8; // log2(groupSizeRadix)
     const radixSetupDispatches = Math.floor((numSplats + groupSizeRadix - 1) / groupSizeRadix);
+    const maxSplatsPerChunk = Math.min(numSplats, 256);
 
     // constants
     const CONSTANTS = {
@@ -65,9 +66,10 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 1,
+        nSteps : 100,
+        MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
-        MAX_SLOTS: numChunks * 2 * 2, // i imagine there cant be more than 256 splats for a 16x16 patch
+        MAX_SLOTS: numChunks * 2 * maxSplatsPerChunk,
         GROUPSIZE: groupSizeRadix,
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
@@ -155,7 +157,7 @@ async function main() {
     const paramDesc = paramBuilder.build();
 
     // i still cant do arrays of structs...
-    const gradientChunkBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numChunks * numSplats);
+    const gradientChunkBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numChunks * CONSTANTS.MAX_SPLATS_CHUNK);
     gradientChunkBuilder.add('pos', "vec2f")
                         .add('scale', "vec2f")
                         .add('rot', "f32")
@@ -193,9 +195,9 @@ async function main() {
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
     radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
+              .add("offsets", { type : "u32", size: numChunks })
               .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS })
               .add("data2", { type : "u32", size: CONSTANTS.MAX_SLOTS })
-              .add("offsets", { type : "u32", size: numChunks });
 
     const radixDesc = radixBuild.build();
         
@@ -614,8 +616,6 @@ async function main() {
         );
     }
     
-    
-
     type Output = {
         initalQ : number,
         finalQ: number,
@@ -663,8 +663,6 @@ async function main() {
     render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
 
     let runGD = async () => {
-        
-
         const start = performance.now();
         console.log("start");
 
@@ -689,8 +687,6 @@ async function main() {
             // again the same thing
             pass.setPipeline(pipelineRadixSetup2);
             pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
-
-            // todo, read out the RadixMemory.data!
 
             // radix sort
             pass.setPipeline(pipelineRadix);
@@ -757,7 +753,6 @@ async function main() {
         const pane = new Pane({
             container: document.getElementById("gd-sliders") as HTMLElement,
         });
-
 
 
         pane.addBinding(PARAMS_OUT, 'initalQ', {

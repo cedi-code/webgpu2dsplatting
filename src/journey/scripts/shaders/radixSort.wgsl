@@ -1,8 +1,8 @@
 struct RadixMemory {
     splatOffsets : array<u32, NUM_DISPATCHES>,
+    offsets : array<u32, numChunksW * numChunksH>,
     data2 : array<u32, MAX_SLOTS>,
     data : array<u32, MAX_SLOTS>,
-    offsets : array<u32, numChunksW * numChunksH>
 };
 
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
@@ -57,6 +57,10 @@ fn radixSort(
         workgroupBarrier();
     } 
 
+    // bit of a hacky way, and will stop working once chunks are >> 256
+    if(local_id < numChunksW * numChunksH) {
+        radixMem.offsets[local_id] = groupBuckets[GROUPSIZE_RADIX-1][local_id];
+    }
 
     // 3.2 correct the other buckets 
     if(local_id > 0u) {
@@ -64,6 +68,7 @@ fn radixSort(
             groupBuckets[i][local_id] += groupBuckets[GROUPSIZE_RADIX-1u][local_id-1u];
         }
     }
+
     workgroupBarrier();
     
     // 4. writing buckets i for each thread in data2 (can do better? dont know)
