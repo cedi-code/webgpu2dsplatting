@@ -65,13 +65,15 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 100,
+        nSteps : 1,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
         MAX_SLOTS: numSplats * 2 * 256, // i imagine ther cant be more than 256 splats for a 16x16 patch
         GROUPSIZE: groupSizeRadix,
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
     };
+
+    console.table(CONSTANTS);
 
     const sharedConstants = Object.entries(CONSTANTS)
     .map(([k, v]) => `const ${k} = ${v};`)
@@ -372,7 +374,7 @@ async function main() {
             module: radixSetupModule,
             entryPoint: 'registerSplats',
             constants: {
-                first_pass: 1,
+                first_pass: 0,
             }
         },
     });
@@ -539,6 +541,13 @@ async function main() {
     const radixV = new Uint32Array(radixDesc.size);
     const radixCounters = new Uint32Array(radixDesc.attributes[1].offset);
     ctx.device.queue.writeBuffer(radixBuff, 0, radixCounters, 0);
+
+    // for testing purposes
+    const radixBuffRead = ctx.device.createBuffer({
+        label: 'loss result buffer',
+        size: radixDesc.sizeBytes,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    });
     // == texture stuff
 
     const testImageUrl = 'assets/overlappImage.jpg';
@@ -616,6 +625,16 @@ async function main() {
         initalQ : 0.5,
         finalQ: 0.0,
         lossLog: 0.0,
+    }
+
+    let readAndPrintBuff = async (
+        buff: GPUBuffer, 
+        TypedArrayConstructor: new (buffer: ArrayBuffer) => Float32Array | Uint32Array
+    ) => {
+        await buff.mapAsync(GPUMapMode.READ);
+        const result = new TypedArrayConstructor(buff.getMappedRange());
+        console.log(result);
+        buff.unmap();
     }
 
     let updateLossResults = async () => {
@@ -708,7 +727,7 @@ async function main() {
 
         // copy buffer to cpu (expensive!)
         encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
-
+        encoder.copyBufferToBuffer(radixBuff, 0, radixBuffRead, 0, radixBuffRead.size);
         // run the work lmao
         const commandBuffer = encoder.finish();
         ctx.device.queue.submit([commandBuffer]);
@@ -723,7 +742,10 @@ async function main() {
         console.log("elapsed time:", elapsed / 1000.0);
 
         // get loss
-        await updateLossResults();      
+        await updateLossResults();   
+        
+        // print radix sort:
+        readAndPrintBuff(radixBuffRead, Uint32Array);
     }
     // == interactive suff, not really needed
     {

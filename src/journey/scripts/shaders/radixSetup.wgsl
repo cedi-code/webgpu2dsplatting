@@ -51,7 +51,7 @@ fn getSplatInfo(global_id: u32) -> SplatInfo {
     let maxY = max(max(lt.y, rt.y), max(lb.y, rb.y));
 
     // grab the current index and increase it by bbox
-    let allocate = 2u * (minX - maxX + 1) * (minY - maxY + 1);
+    let allocate = 2u * (maxX - minX + 1) * (maxY - minY + 1);
 
     return SplatInfo(allocate, vec4u(minX, maxX, minY, maxY));
 }
@@ -76,7 +76,7 @@ fn registerSplats(
     let splatInfo = getSplatInfo(global_invocation_id.x);
 
     // store allocate into  workgroup memory and wait
-    sums[workgroup_id.x] = splatInfo.allocate;
+    sums[local_id] = splatInfo.allocate;
     workgroupBarrier();
 
     // prefix sum with 8 barriers
@@ -114,19 +114,22 @@ fn registerSplats(
     workgroupBarrier();
 
     // then we write into radix sort memory
-    var currOff = atomicLoad(&groupOffset) + sums[local_id];
+    var currOff = atomicLoad(&groupOffset) + sums[local_id] - splatInfo.allocate;
 
+    if (global_invocation_id.x >= NUM_SPLATS) { // no writing when thread is not splat anymore!
+        return;
+    }
     // write down the key value pairs
     let minX = splatInfo.bounds[0];
     let maxX = splatInfo.bounds[1];
     let minY = splatInfo.bounds[2];
     let maxY = splatInfo.bounds[3];
 
-    for(var j = minY; j < maxY+1; j++) {
-        for(var k = minX; k < maxX+1; k++) {
+    for(var j = minY; j < maxY + 1; j++) {
+        for(var k = minX; k < maxX + 1; k++) {
             let boxI = (j * numChunksW) + k;
             // splat id
-            radixMem.data[currOff] = global_invocation_id.x; 
+            radixMem.data[currOff] = global_invocation_id.x + 1; 
             // box id
             radixMem.data[currOff + 1] = boxI;
             currOff += 2;
