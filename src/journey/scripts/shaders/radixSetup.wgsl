@@ -128,10 +128,10 @@ fn registerSplats(
     for(var j = minY; j < maxY + 1; j++) {
         for(var k = minX; k < maxX + 1; k++) {
             let boxI = (j * numChunksW) + k;
-            // splat id
-            radixMem.data[currOff] = global_invocation_id.x + 1; 
             // box id
-            radixMem.data[currOff + 1] = boxI;
+            radixMem.data[currOff] = boxI;
+            // splat id
+            radixMem.data[currOff + 1] = global_invocation_id.x + 1; 
             currOff += 2;
         }
     }
