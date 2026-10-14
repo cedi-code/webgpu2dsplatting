@@ -101,3 +101,60 @@ instead when we write our key value pairs, we want to already do that in order o
 2. Scan: Run a prefix sum over those counts. This gives each splat the exact  starting offset for the radix array of key-value pairs
 
 3. Write: write down the key value pairs starting from the prefix sum offset.
+
+
+### Radix Sort
+
+explain block prefix sum
+
+
+### Backwards pass update
+
+since backwards pass is groupped into chunks, the chunks finally dont need to loop over every splat but only over the splats that overlapp them,
+which we can easly read now given our sorted array that is orderd by chunks!
+
+```
+data = [(chunk1, splat1), (chunk1, splat2), ..., (chunk2, splat1), ..., (chunkN, splat1), ..]
+
+offsets = { chunk i starts at index j }
+```
+we then change our old code:
+
+```wgsl
+@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, NUM_SPLATS>>; // [!code--]
+@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, MAX_SPLATS_CHUNK>>; // [!code++]
+
+...
+let offset = radixMem.offsets[chunk_id]; // [!code++]
+let numSplats = offset - radixMem.offsets[chunk_id - 1] // [!code++] 
+for(var i = numSplats; i > 0u; i--) {
+    let currOff = (offset + i - 1u);  // [!code++]
+    let splatId = radixMem.data2[2u * off + 1u];  // [!code++]
+    GradLoss(splats[splatId], i-1u, uv, colorGrad, &background, &oneMinusAlpha);  
+}
+``` 
+
+but one issue now is how do we sum back our gradient chunks?
+
+for example lets assume we have grad chunk A and grad chunk B,
+
+grad chunk A may have the following:
+
+```
+(gradient_splat1, gradient_splat3)
+```
+
+and grad chunk B:
+
+
+grad chunk A may have the following:
+
+```
+(gradient_splat2, gradient_splat3)
+```
+
+one approach could be using a global gradient memory buffer where each thread adds the gradient into, this would need to be atomic and when having a lot of tiles and one big splat, would lead to a big overhead.
+
+another idea is to perform another radix sort on top of the gradients, this time sorting by splats, and then summing up in parallel all the chunks
+
+well actually we already have this order from the Radix setup! there the order is already in (splat, chunk), so we just need to store all the gradients in that order and then they can easly be summed up in parallel! no need to resort them or do atomic operations! 

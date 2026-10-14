@@ -3,29 +3,46 @@ struct Uniform {
     adamP : AdamParams,
 };
 
+struct RadixMemory {
+    splatOffsets : array<u32, NUM_DISPATCHES>,
+    offsets : array<u32, numChunksW * numChunksH>,
+    data2 : array<u32, MAX_SLOTS>,
+    data : array<u32, MAX_SLOTS>,
+    splatOffsetsTotal: array<u32, NUM_SPLATS>,
+};
+
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
-@group(0) @binding(5) var<storage, read_write> gradients: array<array<Grad, NUM_SPLATS>>; 
+@group(0) @binding(5) var<storage, read_write> gradients: array<Grad, MAX_SLOTS>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(7) var<uniform> uniforms : Uniform;
+@group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
-@compute @workgroup_size(NUM_SPLATS, 1, 1)
-fn cs(@builtin(local_invocation_id) local_invocation_id: vec3u) {
 
-    let n = f32(sampleDim * sampleDim);
-    
-    let i = local_invocation_id.x;
+@compute @workgroup_size(GROUPSIZE, 1, 1)
+fn cs(
+    @builtin(local_invocation_id) local_invocation_id: vec3u,
+    @builtin(global_invocation_id) global_invocation_id : vec3u,
+    ) {
 
-    // a bit dumb but works
+    let i = global_invocation_id.x;
     if(i == 0) {
         adamMemory.t += 1u;
     }
     workgroupBarrier();
-        
+
+    if(i >= NUM_SPLATS) {
+        return;
+    }
+
+    let n = f32(sampleDim * sampleDim);
+    // a bit dumb but works
+
     var moment = adamMemory.m[i];
     var varian = adamMemory.v[i];
 
-    var gradient = gradients[0][i];
+    let gradientOff = radixMem.splatOffsetsTotal[i] / RADIX_ELEMS;
+    var gradient = gradients[gradientOff];
 
     gradient.pos    /= n;
     gradient.scale  /= n;

@@ -3,6 +3,7 @@ struct RadixMemory {
     offsets : array<u32, numChunksW * numChunksH>,
     data2 : array<u32, MAX_SLOTS>,
     data : array<u32, MAX_SLOTS>,
+    splatOffsetsTotal: array<u32, NUM_SPLATS>,
 };
 
 const tile = array<vec2f, 4>(
@@ -52,7 +53,7 @@ fn getSplatInfo(global_id: u32) -> SplatInfo {
     let maxY = max(max(lt.y, rt.y), max(lb.y, rb.y));
 
     // grab the current index and increase it by bbox
-    let allocate = 2u * (maxX - minX + 1) * (maxY - minY + 1);
+    let allocate = RADIX_ELEMS * (maxX - minX + 1) * (maxY - minY + 1);
 
     return SplatInfo(allocate, vec4u(minX, maxX, minY, maxY));
 }
@@ -117,7 +118,8 @@ fn registerSplats(
     // then we write into radix sort memory
     var currOff = atomicLoad(&groupOffset) + sums[local_id] - splatInfo.allocate;
 
-    if (global_invocation_id.x >= NUM_SPLATS) { // no writing when thread is not splat anymore!
+    radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
+    if (local_id >= NUM_SPLATS) { // no writing when thread is not splat anymore!
         return;
     }
     // write down the key value pairs
@@ -130,10 +132,12 @@ fn registerSplats(
         for(var k = minX; k < maxX + 1; k++) {
             let boxI = (j * numChunksW) + k;
             // box id
-            radixMem.data[currOff] = boxI;
+            radixMem.data[currOff + R_CHUNK_INDEX] = boxI;
             // splat id
-            radixMem.data[currOff + 1] = global_invocation_id.x; 
-            currOff += 2;
+            radixMem.data[currOff + R_SPLAT_INDEX] = global_invocation_id.x;
+
+            radixMem.data[currOff + R_TRANSPOSE_INDEX] = 0u; // we dont know the other order yet!
+            currOff += RADIX_ELEMS;
         }
     }
 }

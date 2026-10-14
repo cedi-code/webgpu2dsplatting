@@ -3,6 +3,7 @@ struct RadixMemory {
     offsets : array<u32, numChunksW * numChunksH>,
     data2 : array<u32, MAX_SLOTS>,
     data : array<u32, MAX_SLOTS>,
+    splatOffsetsTotal: array<u32, NUM_SPLATS>,
 };
 
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
@@ -19,7 +20,7 @@ fn radixSort(
     let local_id = local_invocation_id.x;
     // write the number in base 2^8 = 256
 
-    let dataSize = radixMem.splatOffsets[NUM_DISPATCHES-1] >> 1;
+    let dataSize = radixMem.splatOffsets[NUM_DISPATCHES-1] / RADIX_ELEMS;
     let chunk_size_d = (dataSize + GROUPSIZE_RADIX - 1u) / GROUPSIZE_RADIX;
     let chunk_offset_d = local_id * chunk_size_d;
 
@@ -28,7 +29,7 @@ fn radixSort(
     // 1. fill up your local buckets (thread)
     if(local_id < GROUPSIZE_RADIX) {
         for(var i = chunk_offset_d; i < maxChunk; i++) {
-            groupBuckets[local_id][radixMem.data[i << 1] % GROUPSIZE]++;
+            groupBuckets[local_id][radixMem.data[i * RADIX_ELEMS + R_CHUNK_INDEX] % GROUPSIZE]++;
         }
     }
 
@@ -75,12 +76,14 @@ fn radixSort(
     if(local_id < GROUPSIZE_RADIX) {
         for(var i = maxChunk; i > chunk_offset_d; i--) {
             let idx = i - 1u;
-            let bucket = radixMem.data[idx << 1u] % GROUPSIZE;
+            let bucket = radixMem.data[idx * RADIX_ELEMS] % GROUPSIZE;
             let newI = &groupBuckets[local_id][bucket]; // first subtract then read
             *newI = *newI - 1u;
             let newIv = *newI;
-            radixMem.data2[newIv * 2u] = radixMem.data[idx * 2u]; 
-            radixMem.data2[newIv * 2u + 1u] = radixMem.data[idx * 2u + 1u]; 
+            radixMem.data2[newIv * RADIX_ELEMS + R_CHUNK_INDEX]     = radixMem.data[idx * RADIX_ELEMS]; 
+            radixMem.data2[newIv * RADIX_ELEMS + R_SPLAT_INDEX]     = radixMem.data[idx * RADIX_ELEMS + 1u]; 
+            radixMem.data2[newIv * RADIX_ELEMS + R_TRANSPOSE_INDEX] = idx;
+            // radixMem.data[idx * RADIX_ELEMS + 2u] = newIv; // not needed for now?
         }
     }
     

@@ -2,7 +2,7 @@ import { Pane } from 'tweakpane';
 
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
-import { type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
+import { type ArrayType, type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
@@ -20,6 +20,8 @@ import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
 import reduceCompute from '../shaders/reduceGradients.wgsl?raw';
 import radixSetup from '../shaders/radixSetup.wgsl?raw';
 import radixCompute from '../shaders/radixSort.wgsl?raw';
+import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
+
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -51,6 +53,7 @@ async function main() {
     const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
     const numChunks = chunksX * chunksY;
 
+    const radixElements = 3; // splat id, chunk id, permutation id
     const groupSizeRadix = 256;
     const barriersPrefixSum = 8; // log2(groupSizeRadix)
     const radixSetupDispatches = Math.floor((numSplats + groupSizeRadix - 1) / groupSizeRadix);
@@ -66,10 +69,14 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 100,
+        nSteps : 10,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
-        MAX_SLOTS: numChunks * 2 * maxSplatsPerChunk,
+        MAX_SLOTS: numChunks * radixElements * maxSplatsPerChunk,
+        RADIX_ELEMS: radixElements, 
+        R_CHUNK_INDEX: 0,
+        R_SPLAT_INDEX: 1,
+        R_TRANSPOSE_INDEX: 2,
         GROUPSIZE: groupSizeRadix,
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
@@ -128,7 +135,7 @@ async function main() {
             sharedConstants + 
             shaderGradTypes + 
             adamShad +
-            reduceCompute
+            reduceRadixCompute
         ) 
     });
     
@@ -157,13 +164,13 @@ async function main() {
     const paramDesc = paramBuilder.build();
 
     // i still cant do arrays of structs...
-    const gradientChunkBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numChunks * CONSTANTS.MAX_SPLATS_CHUNK);
-    gradientChunkBuilder.add('pos', "vec2f")
+    const gradientStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.MAX_SLOTS );
+    gradientStorageBuilder.add('pos', "vec2f")
                         .add('scale', "vec2f")
                         .add('rot', "f32")
                         .add('color', "vec3f")
                         .add('alpha', "f32");
-    const gradChunkDesc = gradientChunkBuilder.build();
+    const gradStorageDesc = gradientStorageBuilder.build();
 
     // reduce uniform buffer
     const reduceBuilder = new UniformBufferDescriptorBuilder('reduce uniform', "uniform");
@@ -198,6 +205,7 @@ async function main() {
               .add("offsets", { type : "u32", size: numChunks })
               .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS })
               .add("data2", { type : "u32", size: CONSTANTS.MAX_SLOTS })
+              .add("splatOffsetsTotal", { type : "u32", size : CONSTANTS.NUM_SPLATS });
 
     const radixDesc = radixBuild.build();
         
@@ -266,7 +274,7 @@ async function main() {
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
-                minBindingSize: gradChunkDesc.sizeBytes, 
+                minBindingSize: gradStorageDesc.sizeBytes, 
             },
             },
             { // adam memory
@@ -319,7 +327,7 @@ async function main() {
     });
 
     const pipelineLayoutComputeReduce = ctx.device.createPipelineLayout({
-        bindGroupLayouts: [ bindGroupLayoutCompute, bindGroupLayoutReduce ],
+        bindGroupLayouts: [ bindGroupLayoutCompute ],
     });
 
 
@@ -381,6 +389,7 @@ async function main() {
             }
         },
     });
+
     const pipelineRadix = ctx.device.createComputePipeline({
         label: 'radix compute pipeline',
         layout: pipelineLayoutCompute,
@@ -404,7 +413,6 @@ async function main() {
             module: reduceModule,
         },
     }); 
-
 
     const pipelineAdamCompute = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
@@ -503,7 +511,7 @@ async function main() {
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
     // gradient buffer
-    let gradDesc = gradChunkDesc;
+    let gradDesc = gradStorageDesc;
     gradDesc.label = 'gradient buffer';
     const gradientBuffer = bufferManager.createBuffer(gradDesc);
 
@@ -596,25 +604,25 @@ async function main() {
         ]
     });
 
-    // create reduce bind groups?
-        // reduce buffer
-    let reduceBindGroups = [];
-    const reduceSteps = Math.ceil(Math.log2(numChunks));
-    for(let i = 0; i < reduceSteps; i++) {
-        const stride = 2 ** i;
-        const reduceUniBuffer = bufferManager.createBuffer(reduceUniDesc);
-        ctx.device.queue.writeBuffer(reduceUniBuffer, 0, new Uint32Array([stride]));
+    // // create reduce bind groups?
+    //     // reduce buffer
+    // let reduceBindGroups = [];
+    // const reduceSteps = Math.ceil(Math.log2(numChunks));
+    // for(let i = 0; i < reduceSteps; i++) {
+    //     const stride = 2 ** i;
+    //     const reduceUniBuffer = bufferManager.createBuffer(reduceUniDesc);
+    //     ctx.device.queue.writeBuffer(reduceUniBuffer, 0, new Uint32Array([stride]));
 
-        reduceBindGroups.push(
-            ctx.device.createBindGroup({
-                label: `bindGroup-${i} for reduce`,
-                layout: pipelineReduceCompute.getBindGroupLayout(1),
-                entries: [
-                    { binding: 0, resource: reduceUniBuffer },
-                ]
-            })
-        );
-    }
+    //     reduceBindGroups.push(
+    //         ctx.device.createBindGroup({
+    //             label: `bindGroup-${i} for reduce`,
+    //             layout: pipelineReduceCompute.getBindGroupLayout(1),
+    //             entries: [
+    //                 { binding: 0, resource: reduceUniBuffer },
+    //             ]
+    //         })
+    //     );
+    // }
     
     type Output = {
         initalQ : number,
@@ -628,13 +636,19 @@ async function main() {
         lossLog: 0.0,
     }
 
+
+
     let readAndPrintBuff = async (
         buff: GPUBuffer, 
         TypedArrayConstructor: new (buffer: ArrayBuffer) => Float32Array | Uint32Array
     ) => {
         await buff.mapAsync(GPUMapMode.READ);
         const result = new TypedArrayConstructor(buff.getMappedRange());
-        console.log(result);
+        const resultData : number[] = []
+        result.forEach((value : number) => {
+            resultData.push(value);
+        });
+        console.log(resultData);
         buff.unmap();
     }
 
@@ -692,24 +706,22 @@ async function main() {
             pass.setPipeline(pipelineRadix);
             pass.dispatchWorkgroups(1); // only one instance, this could be improved! with using storage buffers more?
 
-
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
             pass.dispatchWorkgroups(chunksX, chunksY);
 
-            // reduce
-            pass.setPipeline(pipelineReduceCompute)
-            let stride = numChunks;
-            reduceBindGroups.forEach(bindGroup => {
-                pass.setBindGroup(1, bindGroup); // instead of a overwrite, create stride pipelines?
-                const reduceCount = Math.floor(stride / 2);
-                stride -= reduceCount;
-                pass.dispatchWorkgroups(reduceCount);
-            });
 
+            // radix sort but on the splats
+
+            // sum up the data array
+
+            // // reduce
+            pass.setPipeline(pipelineReduceCompute);
+            pass.dispatchWorkgroups(CONSTANTS.NUM_SPLATS);
+            
             // adam
             pass.setPipeline(pipelineAdamCompute);
-            pass.dispatchWorkgroups(1);
+            pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
 
             pass.end();
             
@@ -741,8 +753,7 @@ async function main() {
         // get loss
         await updateLossResults();   
         
-        // print radix sort:
-        readAndPrintBuff(radixBuffRead, Uint32Array);
+        
     }
     // == interactive suff, not really needed
     {

@@ -3,6 +3,7 @@ struct RadixMemory {
     offsets : array<u32, numChunksW * numChunksH>,
     data2 : array<u32, MAX_SLOTS>,
     data : array<u32, MAX_SLOTS>,
+    splatOffsetsTotal: array<u32, NUM_SPLATS>,
 };
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
@@ -10,8 +11,7 @@ struct RadixMemory {
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
-@group(0) @binding(5) var<storage, read_write> gradientChunks : array<array<Grad, MAX_SPLATS_CHUNK>>; 
-@group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(5) var<storage, read_write> gradientStorage : array<Grad, MAX_SLOTS>; 
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
 
@@ -79,6 +79,7 @@ fn loadGrad(i : u32) -> Grad {
 fn computeGD(
     @builtin(global_invocation_id) global_invocation_id : vec3u,
     @builtin(workgroup_id) workgroup_id: vec3u,
+    @builtin(local_invocation_id) local_invocation_id : vec3u,
 ) {
     let chunkAcross = u32(( (sampleDim) + chunkWidth - 1) / chunkWidth); // (sampleDim is suqare, and + chunkWidht-1, rounds it up)
     let chunk = workgroup_id.y * chunkAcross + workgroup_id.x;
@@ -113,23 +114,20 @@ fn computeGD(
         for(var i = numSplats; i > 0u; i--) {
             // params
             let off = (prevOff + i - 1u);
-            let splatId = radixMem.data2[2u * off + 1u];
+            let splatId = radixMem.data2[RADIX_ELEMS * off + R_SPLAT_INDEX];
             GradLoss(output[splatId], i-1u, uv, colorGrad, &background, &oneMinusAlpha);                     
         }
     }
     workgroupBarrier();
-
-    if(numSplats == 0u) {
+    let local_id = local_invocation_id.y * chunkWidth + local_invocation_id.x;
+    if(numSplats == 0u || local_id > 0u) {
         return;
     }
 
     // save atomic grads into storage buffer.
     for(var i = numSplats; i > 0; i--) {
-        gradientChunks[chunk][i-1u] = loadGrad(i-1u);  
+        let off = (prevOff + i - 1u);
+        let data1StorageIndex = radixMem.data2[RADIX_ELEMS * off + R_TRANSPOSE_INDEX];
+        gradientStorage[data1StorageIndex] = loadGrad(i-1u);  
     }
-
-    // save loss into right chunk.
-    // bit ugly to use adam memory for this...
-    let lossStep = adamMemory.t % nSteps;
-    lossOutput[chunk][lossStep] = atomicLoadf32_workgroup_u(&loss);
 }
