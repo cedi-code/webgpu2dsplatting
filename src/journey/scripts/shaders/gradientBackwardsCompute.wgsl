@@ -85,13 +85,18 @@ fn computeGD(
     let chunk = workgroup_id.y * chunkAcross + workgroup_id.x;
 
     let offData = radixMem.offsets[chunk];
-    let prevOff = select(0u, radixMem.offsets[chunk-1u], chunk > 0u);
+    var prevOff = 0u;
+    if(chunk > 0u) {
+        prevOff = radixMem.offsets[chunk-1u];
+    }
     let numSplats = min((offData - prevOff), MAX_SPLATS_CHUNK); // if for some reason there are more, we just have to ignore them? :(
 
     if(numSplats == 0u) {
         // do nothing
     }
     else {
+
+
         let n = f32(sampleDim * sampleDim);
         // loss + backwards pass
         let sizeSample = vec2f(sampleDim);

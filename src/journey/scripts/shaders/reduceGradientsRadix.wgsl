@@ -36,12 +36,24 @@ fn cs(
   ) {
 
     let local_id = local_invocation_id.x;
+
+    // GEMINI:  found this bug? did not fix it :(
+    gradSums[local_id].pos   = vec2f(0.0);
+    gradSums[local_id].scale = vec2f(0.0);
+    gradSums[local_id].rot   = 0.0;
+    gradSums[local_id].color = vec3f(0.0);
+    gradSums[local_id].alpha = 0.0;
+    
+    workgroupBarrier(); // Ensure all threads have cleared memory
+
     let splat_id = workgroup_id.x;
 
     let offset = radixMem.splatOffsetsTotal[splat_id] / RADIX_ELEMS;
     let totalBufferSize = radixMem.splatOffsets[NUM_DISPATCHES-1] / RADIX_ELEMS;
-    let nextOffset = select(totalBufferSize, radixMem.splatOffsetsTotal[splat_id+1] / RADIX_ELEMS, splat_id < NUM_SPLATS-1u);
-    
+    var nextOffset = totalBufferSize;
+    if(splat_id < NUM_SPLATS-1u) {
+        nextOffset = radixMem.splatOffsetsTotal[splat_id+1] / RADIX_ELEMS;
+    }    
     let splatStorageSize = nextOffset - offset;
 
     let chunkSize = (splatStorageSize + GROUPSIZE - 1u) / GROUPSIZE;

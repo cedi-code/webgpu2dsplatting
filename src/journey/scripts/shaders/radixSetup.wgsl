@@ -118,8 +118,12 @@ fn registerSplats(
     // then we write into radix sort memory
     var currOff = atomicLoad(&groupOffset) + sums[local_id] - splatInfo.allocate;
 
-    radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
-    if (local_id >= NUM_SPLATS) { // no writing when thread is not splat anymore!
+    // GEMINI: found this potential fix?
+    if (global_invocation_id.x < NUM_SPLATS) {
+        radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
+    }
+
+    if (global_invocation_id.x >= NUM_SPLATS) { // no writing when thread is not splat anymore!
         return;
     }
     // write down the key value pairs
