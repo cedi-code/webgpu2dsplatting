@@ -36,13 +36,6 @@ fn cs(
   ) {
 
     let local_id = local_invocation_id.x;
-
-    // GEMINI:  found this bug? did not fix it :(
-    gradSums[local_id].pos   = vec2f(0.0);
-    gradSums[local_id].scale = vec2f(0.0);
-    gradSums[local_id].rot   = 0.0;
-    gradSums[local_id].color = vec3f(0.0);
-    gradSums[local_id].alpha = 0.0;
     
     workgroupBarrier(); // Ensure all threads have cleared memory
 

@@ -69,7 +69,7 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 10,
+        nSteps : 100,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
         MAX_SLOTS: numChunks * radixElements * maxSplatsPerChunk,
@@ -603,26 +603,6 @@ async function main() {
             { binding: 0, resource: paramBuffer },
         ]
     });
-
-    // // create reduce bind groups?
-    //     // reduce buffer
-    // let reduceBindGroups = [];
-    // const reduceSteps = Math.ceil(Math.log2(numChunks));
-    // for(let i = 0; i < reduceSteps; i++) {
-    //     const stride = 2 ** i;
-    //     const reduceUniBuffer = bufferManager.createBuffer(reduceUniDesc);
-    //     ctx.device.queue.writeBuffer(reduceUniBuffer, 0, new Uint32Array([stride]));
-
-    //     reduceBindGroups.push(
-    //         ctx.device.createBindGroup({
-    //             label: `bindGroup-${i} for reduce`,
-    //             layout: pipelineReduceCompute.getBindGroupLayout(1),
-    //             entries: [
-    //                 { binding: 0, resource: reduceUniBuffer },
-    //             ]
-    //         })
-    //     );
-    // }
     
     type Output = {
         initalQ : number,

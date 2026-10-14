@@ -39,7 +39,7 @@ fn getSplatInfo(global_id: u32) -> SplatInfo {
 
     // get the left, right, top, bottom most points of gaussian
     let R : mat2x2f = rotMat(splat.rot);
-    let s : vec2f = exp(-splat.scale); 
+    let s : vec2f = 4.0 * exp(-splat.scale); 
     let t : vec2f = splat.pos; 
 
     let lt = ndcToBCords(R * (s * tile[0]) + t);  // left top
@@ -117,15 +117,13 @@ fn registerSplats(
 
     // then we write into radix sort memory
     var currOff = atomicLoad(&groupOffset) + sums[local_id] - splatInfo.allocate;
-
-    // GEMINI: found this potential fix?
-    if (global_invocation_id.x < NUM_SPLATS) {
-        radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
-    }
+    
 
     if (global_invocation_id.x >= NUM_SPLATS) { // no writing when thread is not splat anymore!
         return;
     }
+    radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
+    
     // write down the key value pairs
     let minX = splatInfo.bounds[0];
     let maxX = splatInfo.bounds[1];
