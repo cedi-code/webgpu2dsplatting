@@ -20,6 +20,7 @@ import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
 import reduceCompute from '../shaders/reduceGradients.wgsl?raw';
 import radixSetup from '../shaders/radixSetup.wgsl?raw';
 import radixCompute from '../shaders/radixSort.wgsl?raw';
+import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
 import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
 
 
@@ -70,6 +71,7 @@ async function main() {
         numChunksW : chunksX,
         numChunksH : chunksY,
         nSteps : 100,
+        TILE_SCALE: 4,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
         MAX_SLOTS: numChunks * radixElements * maxSplatsPerChunk,
@@ -93,6 +95,7 @@ async function main() {
         code: (
             sharedConstants + 
             shaderGradTypes + 
+            radixTypes +
             generateAtomicOperations() + 
             shaderGaussFunctions + 
             adamShad +
@@ -105,6 +108,7 @@ async function main() {
         code: (
             sharedConstants + 
             shaderGradTypes + 
+            radixTypes +
             generateAtomicOperations() + 
             adamShad  + 
             adamCompute
@@ -116,6 +120,7 @@ async function main() {
         code: (
             sharedConstants + 
             shaderGradTypes + 
+            radixTypes +
             shaderGaussFunctions +
             radixSetup
         ) 
@@ -124,6 +129,7 @@ async function main() {
     const radixModule = ctx.device.createShaderModule({
         label: 'radix pass',
         code: (
+            radixTypes +
             sharedConstants +
             radixCompute
         )
@@ -134,6 +140,7 @@ async function main() {
         code: (
             sharedConstants + 
             shaderGradTypes + 
+            radixTypes +
             adamShad +
             reduceRadixCompute
         ) 

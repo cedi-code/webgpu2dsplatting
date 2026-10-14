@@ -1,11 +1,3 @@
-struct RadixMemory {
-    splatOffsets : array<u32, NUM_DISPATCHES>,
-    offsets : array<u32, numChunksW * numChunksH>,
-    data2 : array<u32, MAX_SLOTS>,
-    data : array<u32, MAX_SLOTS>,
-    splatOffsetsTotal: array<u32, NUM_SPLATS>,
-};
-
 const tile = array<vec2f, 4>(
     // triangle 1
     vec2f( -1.0,  1.0),  // left top
@@ -18,10 +10,10 @@ const tile = array<vec2f, 4>(
 const NUM_256 = (NUM_DISPATCHES + GROUPSIZE - 1u) / GROUPSIZE;
 
 fn ndcToBCords(pos : vec2f) -> vec2u {
-    let posNorm = (pos * vec2f(2.0, -2.0) - vec2f(1.0, -1.0)); 
+    // let posNorm = (pos * vec2f(2.0, -2.0) - vec2f(1.0, -1.0)); 
     return vec2u(
-        clamp(u32(posNorm.x * f32(numChunksW)), 0u, numChunksW-1u),
-        clamp(u32(posNorm.y * f32(numChunksH)), 0u, numChunksH-1u)
+        clamp(u32(pos.x * f32(numChunksW)), 0u, numChunksW-1u),
+        clamp(u32(pos.y * f32(numChunksH)), 0u, numChunksH-1u)
     );
 }
 
@@ -39,7 +31,7 @@ fn getSplatInfo(global_id: u32) -> SplatInfo {
 
     // get the left, right, top, bottom most points of gaussian
     let R : mat2x2f = rotMat(splat.rot);
-    let s : vec2f = 4.0 * exp(-splat.scale); 
+    let s : vec2f = TILE_SCALE * exp(-splat.scale); 
     let t : vec2f = splat.pos; 
 
     let lt = ndcToBCords(R * (s * tile[0]) + t);  // left top
@@ -117,13 +109,12 @@ fn registerSplats(
 
     // then we write into radix sort memory
     var currOff = atomicLoad(&groupOffset) + sums[local_id] - splatInfo.allocate;
-    
 
     if (global_invocation_id.x >= NUM_SPLATS) { // no writing when thread is not splat anymore!
         return;
     }
     radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
-    
+
     // write down the key value pairs
     let minX = splatInfo.bounds[0];
     let maxX = splatInfo.bounds[1];

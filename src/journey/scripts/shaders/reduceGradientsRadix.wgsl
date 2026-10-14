@@ -1,11 +1,3 @@
-struct RadixMemory {
-    splatOffsets : array<u32, NUM_DISPATCHES>,
-    offsets : array<u32, numChunksW * numChunksH>,
-    data2 : array<u32, MAX_SLOTS>,
-    data : array<u32, MAX_SLOTS>,
-    splatOffsetsTotal: array<u32, NUM_SPLATS>,
-};
-
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
 @group(0) @binding(5) var<storage, read_write> gradientStorage : array<Grad, MAX_SLOTS>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
@@ -36,13 +28,15 @@ fn cs(
   ) {
 
     let local_id = local_invocation_id.x;
-    
-    workgroupBarrier(); // Ensure all threads have cleared memory
-
     let splat_id = workgroup_id.x;
 
+    var totalBufferSize = 0u;
+    for(var i = 0u; i < NUM_DISPATCHES; i++) {
+        totalBufferSize += radixMem.splatOffsets[i];
+    }
+    totalBufferSize /= RADIX_ELEMS;
+
     let offset = radixMem.splatOffsetsTotal[splat_id] / RADIX_ELEMS;
-    let totalBufferSize = radixMem.splatOffsets[NUM_DISPATCHES-1] / RADIX_ELEMS;
     var nextOffset = totalBufferSize;
     if(splat_id < NUM_SPLATS-1u) {
         nextOffset = radixMem.splatOffsetsTotal[splat_id+1] / RADIX_ELEMS;

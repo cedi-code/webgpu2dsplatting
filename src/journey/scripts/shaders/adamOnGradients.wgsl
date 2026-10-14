@@ -3,15 +3,6 @@ struct Uniform {
     adamP : AdamParams,
 };
 
-struct RadixMemory {
-    splatOffsets : array<u32, NUM_DISPATCHES>,
-    offsets : array<u32, numChunksW * numChunksH>,
-    data2 : array<u32, MAX_SLOTS>,
-    data : array<u32, MAX_SLOTS>,
-    splatOffsetsTotal: array<u32, NUM_SPLATS>,
-};
-
-
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(5) var<storage, read_write> gradients: array<Grad, MAX_SLOTS>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;

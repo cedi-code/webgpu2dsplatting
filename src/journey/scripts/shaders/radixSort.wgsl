@@ -1,11 +1,3 @@
-struct RadixMemory {
-    splatOffsets : array<u32, NUM_DISPATCHES>,
-    offsets : array<u32, numChunksW * numChunksH>,
-    data2 : array<u32, MAX_SLOTS>,
-    data : array<u32, MAX_SLOTS>,
-    splatOffsetsTotal: array<u32, NUM_SPLATS>,
-};
-
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
 // max workgroup memory is 16384
@@ -20,7 +12,11 @@ fn radixSort(
     let local_id = local_invocation_id.x;
     // write the number in base 2^8 = 256
 
-    let dataSize = radixMem.splatOffsets[NUM_DISPATCHES-1] / RADIX_ELEMS;
+    var dataSize = 0u;
+    for(var i = 0u; i < NUM_DISPATCHES; i++) {
+        dataSize += radixMem.splatOffsets[i];
+    }
+    dataSize /= RADIX_ELEMS;
     let chunk_size_d = (dataSize + GROUPSIZE_RADIX - 1u) / GROUPSIZE_RADIX;
     let chunk_offset_d = local_id * chunk_size_d;
 

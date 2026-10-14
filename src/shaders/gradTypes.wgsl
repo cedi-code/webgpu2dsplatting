@@ -33,5 +33,3 @@ struct GaussParams {
     scale : vec2f,
     rot : f32,
 };
-
-
