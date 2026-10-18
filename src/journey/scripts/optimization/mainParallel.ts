@@ -22,6 +22,7 @@ import radixSetup from '../shaders/radixSetup.wgsl?raw';
 import radixCompute from '../shaders/radixSort.wgsl?raw';
 import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
 import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
+import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
 
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
@@ -145,6 +146,16 @@ async function main() {
             reduceRadixCompute
         ) 
     });
+
+    const reduceLossModule = ctx.device.createShaderModule({
+        label: 'loss reduce',
+        code: (
+            sharedConstants +
+            shaderGradTypes + 
+            adamShad +
+            reduceLossCompute 
+        )
+    })
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
@@ -154,6 +165,8 @@ async function main() {
             gaussTileVertStorage
         ),
     });
+
+
 
 
     const fsModule = ctx.device.createShaderModule({
@@ -414,15 +427,23 @@ async function main() {
     });
 
     const pipelineReduceCompute  = ctx.device.createComputePipeline({
-        label: 'gd compute pipeline',
+        label: 'reduce gradients compute pipeline',
         layout: pipelineLayoutComputeReduce,
         compute: {
             module: reduceModule,
         },
     }); 
 
+    const pipelineReduceLossCompute = ctx.device.createComputePipeline({
+        label: 'reduce loss pipeline',
+        layout: pipelineLayoutComputeReduce,
+        compute: {
+            module: reduceLossModule,
+        }
+    });
+
     const pipelineAdamCompute = ctx.device.createComputePipeline({
-        label: 'gd compute pipeline',
+        label: 'adam compute pipeline',
         layout: pipelineLayoutCompute,
         compute: {
             module: adamModule,
@@ -705,6 +726,10 @@ async function main() {
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
             pass.dispatchWorkgroups(CONSTANTS.NUM_SPLATS);
+
+            // reduce loss
+            pass.setPipeline(pipelineReduceLossCompute);
+            pass.dispatchWorkgroups(256);
             
             // adam
             pass.setPipeline(pipelineAdamCompute);

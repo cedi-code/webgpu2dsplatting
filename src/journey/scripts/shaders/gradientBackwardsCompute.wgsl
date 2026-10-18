@@ -1,9 +1,10 @@
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
-@group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
+@group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>, numChunksW * numChunksH>;
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
 @group(0) @binding(5) var<storage, read_write> gradientStorage : array<Grad, MAX_SLOTS>; 
+@group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
 
@@ -90,7 +91,7 @@ fn computeGD(
 
 
         let n = f32(sampleDim * sampleDim);
-        // loss + backwards pass
+        // backwards pass
         let sizeSample = vec2f(sampleDim);
         let uv = vec2f(global_invocation_id.xy) / sizeSample;
         let color = textureSampleLevel(goalTexture, ourSampler, uv, 0.0);
@@ -127,4 +128,8 @@ fn computeGD(
         let data1StorageIndex = radixMem.data2[RADIX_ELEMS * off + R_TRANSPOSE_INDEX];
         gradientStorage[data1StorageIndex] = loadGrad(i-1u);  
     }
+
+    // save loss
+    let lossI = adamMemory.t % nSteps;
+    lossOutput[chunk][lossI] = atomicLoadf32_workgroup_u(&loss);
 }

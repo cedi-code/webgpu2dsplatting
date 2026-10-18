@@ -48,7 +48,7 @@ fn cs(
     let nextThreadOffset = offset + min(splatStorageSize, chunkSize * (local_id+1u));
     
     for(var i = threadOffset; i < nextThreadOffset; i++) {
-        // sum up the gradients (maybe in workgroup memory lol?)
+        // sum up the gradients
         addGradStorToWork(local_id, i);
     }
 
