@@ -32,6 +32,6 @@ fn reduceLoss(@builtin(local_invocation_id) local_id: vec3u) {
     }
 
     if (local == 0u) {
-        lossOutput[0][lossI] = shared_loss[255]; 
+        lossOutput[0][lossI] = shared_loss[255] / 256; 
     }
 }

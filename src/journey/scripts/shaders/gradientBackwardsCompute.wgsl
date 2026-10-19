@@ -131,5 +131,5 @@ fn computeGD(
 
     // save loss
     let lossI = adamMemory.t % nSteps;
-    lossOutput[chunk][lossI] = atomicLoadf32_workgroup_u(&loss);
+    lossOutput[chunk][lossI] = atomicLoadf32_workgroup_u(&loss) / (chunkWidth * chunkHeight);
 }
