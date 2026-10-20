@@ -56,8 +56,9 @@ async function main() {
     }
 
     // number of splats
-    const numSplats = 300; // hard limit is 1 splat per pixel?
-    const sampleDim = 512;
+    const numSplats = 40; // hard limit is 1 splat per pixel?
+    const activeSplats = 30;
+    const sampleDim = 128;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
@@ -240,7 +241,8 @@ async function main() {
     uniBuild.add('lr', "f32")
             .add('b1', "f32")
             .add('b2', "f32")
-            .add('eps', "f32");    
+            .add('eps', "f32")
+            .add('activeSplats', "u32");
     const uniDesc = uniBuild.build();
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
@@ -553,13 +555,14 @@ async function main() {
     const unitS = paramDesc.unitSize!;
     let nextUnit = unitS;
 
+    let minimumS = 2;
     let randomSplatInit = (n : number) => {
         for(let i = 0; i < n; i++) {
             let rndPos = vec2.clamp(vec2.create(Math.random(), Math.random()), 0.1, 0.9);
             input.set(rndPos, posOff + unitS * i);
 
             let rndScale = vec2.add(
-                vec2.create(3,3), 
+                vec2.create(minimumS,minimumS), 
                 vec2.scale(vec2.create(Math.random(), Math.random()), 2.0)
             );
             input.set(rndScale, scaleOff + unitS * i);
@@ -578,7 +581,7 @@ async function main() {
         }
     }
 
-    randomSplatInit(CONSTANTS.NUM_SPLATS);
+    randomSplatInit(activeSplats);
 
     // // gauss 1
     // input.set([0.9, 0.3], posOff);
@@ -596,7 +599,7 @@ async function main() {
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
-        for(let i = 0; i < numSplats; i++) {
+        for(let i = 0; i < Math.min(activeSplats, 30); i++) {
             const splatData = data.subarray(unitS*i, unitS*(i+1));
             result.push(parseParams(splatData, paramDesc));
         }
@@ -633,19 +636,22 @@ async function main() {
     // == uniform stuff for interaction ==
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
-    const uniVal = new Float32Array([
+    const uniV = new ArrayBuffer(uniDesc.sizeBytes);
+    const uniVAdam = new Float32Array(uniV, uniDesc.attributes[0].offsetBytes, 4);
+    const uniVActiveSplats = new Uint32Array(uniV, uniDesc.attributes[4].offsetBytes, 1);
+    uniVAdam.set([
         0.05,
         0.9,
         0.999,
         MACHINE_EPSILON
-    ]); // adam params
+    ]);
+    uniVActiveSplats[0] = activeSplats;
     
-    ctx.device.queue.writeBuffer(uniBuff, 0, uniVal , 0);
+    ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
 
     // radix buffer setup
 
     const radixBuff = bufferManager.createBuffer(radixDesc);
-    const radixV = new Uint32Array(radixDesc.size);
     const radixCounters = new Uint32Array(radixDesc.attributes[1].offset);
     ctx.device.queue.writeBuffer(radixBuff, 0, radixCounters, 0);
 
@@ -746,11 +752,11 @@ async function main() {
 
     // render in texture
     ctx.renderPassDescriptor = renderPassDescriptorTexture;
-    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats, true);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, true);
 
     // renders on screen
     ctx.renderPassDescriptor = renderPassDescriptorScreen;
-    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats);
 
     let runGD = async () => {
         const start = performance.now();
@@ -799,7 +805,7 @@ async function main() {
 
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
-            pass.dispatchWorkgroups(CONSTANTS.NUM_SPLATS);
+            pass.dispatchWorkgroups(activeSplats);
 
             // reduce loss
             pass.setPipeline(pipelineReduceLossCompute);
@@ -815,7 +821,7 @@ async function main() {
             const passRender = encoder.beginRenderPass(renderPassDescriptorTexture);
             passRender.setPipeline(pipeLineForward);
             passRender.setBindGroup(0, bindGroupForward);
-            passRender.draw(6, numSplats);
+            passRender.draw(6, activeSplats);
 
             passRender.end();
         }
@@ -829,7 +835,7 @@ async function main() {
         
         // display on canvas
         ctx.renderPassDescriptor = renderPassDescriptorScreen;
-        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, numSplats);
+        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats);
 
         await ctx.device.queue.onSubmittedWorkDone();
 

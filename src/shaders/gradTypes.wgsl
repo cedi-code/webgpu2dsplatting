@@ -33,3 +33,15 @@ struct GaussParams {
     scale : vec2f,
     rot : f32,
 };
+
+struct AdamParams {
+    lr: f32,
+    b1: f32,
+    b2: f32,
+    eps: f32,
+};
+
+struct Uniform {
+    adamP: AdamParams,
+    activeSplats: u32,
+};

@@ -1,6 +1,7 @@
 @group(0) @binding(3) var<storage, read_write> lossOutput : array<array<f32, nSteps>>;
 @group(0) @binding(5) var<storage, read_write> gradientStorage : array<Grad, MAX_SLOTS>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
 var<workgroup> gradSums: array<Grad, GROUPSIZE>;
@@ -34,7 +35,7 @@ fn cs(
 
     let offset = radixMem.splatOffsetsTotal[splat_id] / RADIX_ELEMS;
     var nextOffset = totalBufferSize;
-    if(splat_id < NUM_SPLATS-1u) {
+    if(splat_id < uniforms.activeSplats-1u) {
         nextOffset = radixMem.splatOffsetsTotal[splat_id+1] / RADIX_ELEMS;
     }    
     let splatStorageSize = nextOffset - offset;

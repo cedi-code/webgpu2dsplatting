@@ -1,8 +1,4 @@
 
-struct Uniform {
-    adamP : AdamParams,
-};
-
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(5) var<storage, read_write> gradients: array<Grad, MAX_SLOTS>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
@@ -22,7 +18,7 @@ fn cs(
     }
     workgroupBarrier();
 
-    if(i >= NUM_SPLATS) {
+    if(i >= uniforms.activeSplats) {
         return;
     }
 
