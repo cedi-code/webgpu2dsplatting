@@ -1,9 +1,3 @@
-struct AdamParams {
-    lr: f32,
-    b1: f32,
-    b2: f32,
-    eps: f32,
-};
 
 // todo, adam-memory should NOT EXIST when done correctly / should be allocated with adamInit
 struct AdamMemory {
