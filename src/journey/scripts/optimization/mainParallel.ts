@@ -1,5 +1,7 @@
 import { Pane } from 'tweakpane';
 
+import { vec2, vec3, type Vec2 } from "wgpu-matrix";
+
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
 import { type ArrayType, type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
@@ -39,16 +41,23 @@ let lossPlot = createLossPlot(plotHTMLElem);
 
 const MACHINE_EPSILON = 1.19e-07;
 
+const canvasId = "main"
+const canvasElem = (document.getElementById('main') as HTMLCanvasElement);
+const canvasDim = {
+    width : canvasElem.width, 
+    height : canvasElem.height,
+};
+
 async function main() {
 
-    const ctx = await getWebGPUctx({ canvasId: "main"});
+    const ctx = await getWebGPUctx({ canvasId: canvasId});
     if(!ctx) {
         return;
     }
 
     // number of splats
-    const numSplats = 2; // hard limit is 1 splat per pixel?
-    const sampleDim = 128;
+    const numSplats = 300; // hard limit is 1 splat per pixel?
+    const sampleDim = 512;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
@@ -503,7 +512,7 @@ async function main() {
     const textureForward = ctx.device.createTexture({
         label: 'forwardpass texture',
         format: 'rgba8unorm',
-        size: [256, 256],
+        size: [canvasDim.width, canvasDim.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
@@ -544,19 +553,46 @@ async function main() {
     const unitS = paramDesc.unitSize!;
     let nextUnit = unitS;
 
-    // gauss 1
-    input.set([0.9, 0.3], posOff);
-    input.set([1.5, 1.5], scaleOff);
-    input.set([0.0], rotOff);
-    input.set([8.0, 1.0, 1.0], colorOff);
-    input.set([4.0], alphaOff);
+    let randomSplatInit = (n : number) => {
+        for(let i = 0; i < n; i++) {
+            let rndPos = vec2.clamp(vec2.create(Math.random(), Math.random()), 0.1, 0.9);
+            input.set(rndPos, posOff + unitS * i);
 
-    // gauss 2
-    input.set([0.3, 0.6], nextUnit + posOff);
-    input.set([0.7, 1.0], nextUnit + scaleOff);
-    input.set([0.0], nextUnit + rotOff);
-    input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
-    input.set([4.0], nextUnit + alphaOff);
+            let rndScale = vec2.add(
+                vec2.create(3,3), 
+                vec2.scale(vec2.create(Math.random(), Math.random()), 2.0)
+            );
+            input.set(rndScale, scaleOff + unitS * i);
+
+            let rndRot = Math.PI * Math.random();
+            input.set([rndRot], rotOff + unitS * i);
+
+            let rndColor = vec3.add(
+                vec3.create(1),
+                vec3.scale(vec3.create(Math.random(), Math.random(), Math.random()), 9.0)
+            );
+            input.set(rndColor, colorOff + unitS * i);
+
+            let rndAlpha = 4.0 + Math.random() * 4.0;
+            input.set([rndAlpha], alphaOff + unitS * i);
+        }
+    }
+
+    randomSplatInit(CONSTANTS.NUM_SPLATS);
+
+    // // gauss 1
+    // input.set([0.9, 0.3], posOff);
+    // input.set([1.5, 1.5], scaleOff);
+    // input.set([0.0], rotOff);
+    // input.set([8.0, 1.0, 1.0], colorOff);
+    // input.set([4.0], alphaOff);
+
+    // // gauss 2
+    // input.set([0.3, 0.6], nextUnit + posOff);
+    // input.set([0.7, 1.0], nextUnit + scaleOff);
+    // input.set([0.0], nextUnit + rotOff);
+    // input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
+    // input.set([4.0], nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
@@ -621,7 +657,7 @@ async function main() {
     });
     // == texture stuff
 
-    const testImageUrl = 'assets/overlappImage.jpg';
+    const testImageUrl = 'assets/jeff.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -631,7 +667,7 @@ async function main() {
     });
 
     ctx.device.queue.copyExternalImageToTexture(
-        { source, flipY: true },
+        { source, flipY: false },
         { texture },
         { width: source.width, height: source.height }
     );
@@ -767,7 +803,7 @@ async function main() {
 
             // reduce loss
             pass.setPipeline(pipelineReduceLossCompute);
-            pass.dispatchWorkgroups(256);
+            pass.dispatchWorkgroups(1);
             
             // adam
             pass.setPipeline(pipelineAdamCompute);

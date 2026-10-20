@@ -111,11 +111,6 @@ fn radixSort(
         workgroupBarrier();
     } 
 
-    // // bit of a hacky way, and will stop working once chunks are >> 256
-    // if(local_id < numChunksW * numChunksH) {
-    //     radixMem.offsets[local_id] = groupBuckets[GROUPSIZE_RADIX-1][local_id];
-    // }
-
     // 3.2 correct the other buckets 
     if(local_id > 0u) {
         for(var i = 0u; i < GROUPSIZE_RADIX-1u; i++) {
@@ -125,7 +120,7 @@ fn radixSort(
 
     workgroupBarrier();
     
-    // 4. writing buckets i for each thread in data2 (can do better? dont know)
+    // 4. writing buckets i for each thread in data2 (can do better? only 16 threads are doing that!)
     if(local_id < GROUPSIZE_RADIX) {
         for(var i = maxChunk; i > chunk_offset_d; i--) {
             let idx = i - 1u;
