@@ -1,17 +1,11 @@
-import { Pane } from 'tweakpane';
 
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../myutils/BufferHelper';
-
-import { type ArrayType, type UniformBufferDescriptor } from '../mytypes/BufferDescriptors';
-
 import { getWebGPUctx, render } from '../myutils/ContextHelpers';
 
-import { parseParams, type FlatParams, createLossPlot } from '../myutils/LogHelpers';
-
-import { generateAtomicOperations } from '../myutils/ShaderTemplating';
 
 import radixCompute from '../journey/scripts/shaders/radixSort.wgsl?raw';
 import radixTypes from '../shaders/radixTypes.wgsl?raw';
+import radixOffsets from '../journey/scripts/shaders/radixChunkOffsets.wgsl?raw';
 
 const MACHINE_EPSILON = 1.19e-07;
 
@@ -30,6 +24,7 @@ async function main() {
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
     const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
     const numChunks = chunksX * chunksY;
+    console.log(numChunks);
 
     const radixElements = 3; // splat id, chunk id, permutation id
     const groupSizeRadix = 256;
@@ -54,6 +49,7 @@ async function main() {
         GROUPSIZE: groupSizeRadix,
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : 1,
+        NUM_SORTS : 2,
     };
 
     console.table(CONSTANTS);
@@ -71,6 +67,15 @@ async function main() {
         )
     });
 
+    const radixOffModule = ctx.device.createShaderModule({
+        label: 'radix pass',
+        code: (
+            radixTypes +
+            sharedConstants +
+            radixOffsets
+        )
+    });
+
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
 
     radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
@@ -80,10 +85,31 @@ async function main() {
               .add("splatOffsetsTotal", { type : "u32", size : CONSTANTS.NUM_SPLATS });
 
     const radixDesc = radixBuild.build();
+
+    const bindGroupLayoutDescriptorsRadix = ctx.device.createBindGroupLayout(
+        {
+            entries: [
+            { // uniforms
+                binding: 8,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: 'storage',
+                    minBindingSize: radixDesc.sizeBytes,
+
+                },
+                },
+            ],
+        },
+    );
+
+    const pipelineLayoutRadix = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutDescriptorsRadix ],
+    });
+
         
     const pipelineRadix0 = ctx.device.createComputePipeline({
         label: 'radix compute pipeline pass 0',
-        layout: 'auto',
+        layout: pipelineLayoutRadix,
         compute: {
             module: radixModule,
             constants: {
@@ -94,12 +120,20 @@ async function main() {
 
     const pipelineRadix1 = ctx.device.createComputePipeline({
         label: 'radix compute pipeline pass 0',
-        layout: 'auto',
+        layout: pipelineLayoutRadix,
         compute: {
             module: radixModule,
             constants: {
                 pass_nr: 1,
             }
+        },
+    });
+
+    const pipelineOffset = ctx.device.createComputePipeline({
+        label: 'offset calc',
+        layout: pipelineLayoutRadix,
+        compute: {
+            module: radixOffModule,
         },
     });
 
@@ -133,10 +167,10 @@ async function main() {
     radixV.set([testSize], rSplatOff);
     radixV.set([ // (splat id, chunk id, _)
         3, 98, 0,
-        512, 98, 0,
-        513, 98, 0,
+        0, 98, 0,
+        0, 98, 0,
+        3, 99, 0,
         1, 99, 0,
-        256, 99, 0,
         2, 99, 0,
     ], rDataOff);
 
@@ -159,14 +193,14 @@ async function main() {
         ]
     });
 
-    let readAndPrintBuff = async (
+    let readAndPrintData = async (
         buff: GPUBuffer, 
         TypedArrayConstructor: new (buffer: ArrayBuffer) => Float32Array | Uint32Array
     ) => {
         await buff.mapAsync(GPUMapMode.READ);
         const result = new TypedArrayConstructor(buff.getMappedRange());
         const resultData : { 'chunkid' : number, 'splatid' : number, 'inv' : number }[] = []
-        const data2Res = result.subarray(rData2Off, rDataOff); 
+        const data2Res = result.subarray(rDataOff, rSplTot); 
         for(let i = 0; i < CONSTANTS.MAX_SLOTS; i+=CONSTANTS.RADIX_ELEMS) {
             resultData.push(
                 {
@@ -177,6 +211,21 @@ async function main() {
             );
         }
 
+        console.table(resultData);
+        buff.unmap();
+    }
+
+    let readAndPrintOff = async (
+        buff: GPUBuffer, 
+        TypedArrayConstructor: new (buffer: ArrayBuffer) => Float32Array | Uint32Array
+    ) => {
+        await buff.mapAsync(GPUMapMode.READ);
+        const result = new TypedArrayConstructor(buff.getMappedRange());
+        const resultData : number[] = []
+        const data2Res = result.subarray(rOffOff, rData2Off); 
+        data2Res.forEach((elem : number) => {
+            resultData.push(elem);
+        })
         console.table(resultData);
         buff.unmap();
     }
@@ -202,6 +251,9 @@ async function main() {
         pass.setPipeline(pipelineRadix1);
         pass.dispatchWorkgroups(1); // only one instance, this could be improved! with using storage buffers more?
 
+        pass.setPipeline(pipelineOffset);
+        const gr = Math.floor((numChunks + (CONSTANTS.GROUPSIZE -1)) / CONSTANTS.GROUPSIZE)
+        pass.dispatchWorkgroups(gr);
         pass.end();
 
 
@@ -212,7 +264,8 @@ async function main() {
         ctx.device.queue.submit([commandBuffer]);
         
         // print buffer  
-        readAndPrintBuff(radixBuffRead, Uint32Array);
+        // readAndPrintData(radixBuffRead, Uint32Array);
+        readAndPrintOff(radixBuffRead, Uint32Array);
     }
 
     runRadix();

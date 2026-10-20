@@ -113,6 +113,12 @@ fn registerSplats(
     if (global_invocation_id.x >= NUM_SPLATS) { // no writing when thread is not splat anymore!
         return;
     }
+
+    // hacky way to store the total data size
+    if(global_invocation_id.x == NUM_SPLATS-1u) {
+        radixMem.splatOffsets[NUM_DISPATCHES-1u] = atomicLoad(&groupOffset) + sums[local_id];
+    }
+
     radixMem.splatOffsetsTotal[global_invocation_id.x] = currOff;
 
     // write down the key value pairs

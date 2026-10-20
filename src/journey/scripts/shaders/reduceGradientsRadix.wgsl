@@ -30,11 +30,7 @@ fn cs(
     let local_id = local_invocation_id.x;
     let splat_id = workgroup_id.x;
 
-    var totalBufferSize = 0u;
-    for(var i = 0u; i < NUM_DISPATCHES; i++) {
-        totalBufferSize += radixMem.splatOffsets[i];
-    }
-    totalBufferSize /= RADIX_ELEMS;
+    let totalBufferSize =  radixMem.splatOffsets[NUM_DISPATCHES-1u] / RADIX_ELEMS;
 
     let offset = radixMem.splatOffsetsTotal[splat_id] / RADIX_ELEMS;
     var nextOffset = totalBufferSize;

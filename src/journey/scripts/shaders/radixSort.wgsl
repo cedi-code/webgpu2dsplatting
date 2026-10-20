@@ -67,11 +67,8 @@ fn radixSort(
     let local_id = local_invocation_id.x;
     // write the number in base 2^8 = 256
 
-    var dataSize = 0u;
-    for(var i = 0u; i < NUM_DISPATCHES; i++) {
-        dataSize += radixMem.splatOffsets[i];
-    }
-    dataSize /= RADIX_ELEMS;
+    let dataSize = radixMem.splatOffsets[NUM_DISPATCHES-1] / RADIX_ELEMS;
+
     let chunk_size_d = (dataSize + GROUPSIZE_RADIX - 1u) / GROUPSIZE_RADIX;
     let chunk_offset_d = local_id * chunk_size_d;
 
@@ -114,10 +111,10 @@ fn radixSort(
         workgroupBarrier();
     } 
 
-    // bit of a hacky way, and will stop working once chunks are >> 256
-    if(local_id < numChunksW * numChunksH) {
-        radixMem.offsets[local_id] = groupBuckets[GROUPSIZE_RADIX-1][local_id];
-    }
+    // // bit of a hacky way, and will stop working once chunks are >> 256
+    // if(local_id < numChunksW * numChunksH) {
+    //     radixMem.offsets[local_id] = groupBuckets[GROUPSIZE_RADIX-1][local_id];
+    // }
 
     // 3.2 correct the other buckets 
     if(local_id > 0u) {
@@ -141,5 +138,6 @@ fn radixSort(
             swapRadixData(idx, newIv);
         }
     }
+
     
 }

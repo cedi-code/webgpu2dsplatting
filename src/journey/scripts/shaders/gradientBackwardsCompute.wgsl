@@ -11,6 +11,27 @@
 var<workgroup> grad: array<AtomicGrad, MAX_SPLATS_CHUNK>;
 var<workgroup> loss: atomic<u32>;
 
+fn readSplatId(index : u32) -> u32 {
+    if(NUM_SORTS % 2 == 0) 
+    {
+        return radixMem.data[index * RADIX_ELEMS + R_SPLAT_INDEX];
+    }
+    else 
+    {
+        return radixMem.data2[index * RADIX_ELEMS + R_SPLAT_INDEX];
+    }
+}
+fn readInvId(index : u32) -> u32 {
+    if(NUM_SORTS % 2 == 0) 
+    {
+        return radixMem.data[index * RADIX_ELEMS + R_TRANSPOSE_INDEX];
+    }
+    else 
+    {
+        return radixMem.data2[index * RADIX_ELEMS + R_TRANSPOSE_INDEX];
+    }
+}
+
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
     return (
         (gColor.r - imgC.r) * (gColor.r - imgC.r) + 
@@ -112,7 +133,7 @@ fn computeGD(
         for(var i = numSplats; i > 0u; i--) {
             // params
             let off = (prevOff + i - 1u);
-            let splatId = radixMem.data2[RADIX_ELEMS * off + R_SPLAT_INDEX];
+            let splatId = readSplatId(off);
             GradLoss(output[splatId], i-1u, uv, colorGrad, &background, &oneMinusAlpha);                     
         }
     }
@@ -125,7 +146,7 @@ fn computeGD(
     // save atomic grads into storage buffer.
     for(var i = numSplats; i > 0; i--) {
         let off = (prevOff + i - 1u);
-        let data1StorageIndex = radixMem.data2[RADIX_ELEMS * off + R_TRANSPOSE_INDEX];
+        let data1StorageIndex = readInvId(off);
         gradientStorage[data1StorageIndex] = loadGrad(i-1u);  
     }
 

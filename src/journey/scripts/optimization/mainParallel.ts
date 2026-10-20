@@ -23,7 +23,7 @@ import radixCompute from '../shaders/radixSort.wgsl?raw';
 import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
 import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
 import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
-
+import radixOffsets from '../shaders/radixChunkOffsets.wgsl?raw';
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -61,6 +61,10 @@ async function main() {
     const radixSetupDispatches = Math.floor((numSplats + groupSizeRadix - 1) / groupSizeRadix);
     const maxSplatsPerChunk = Math.min(numSplats, 256);
 
+    // logb(a) = logc(a) / locc(b)
+    const numRadixSorts = 1 + Math.floor(Math.log(numChunks) / Math.log(radixElements));
+    const groupChunkRatio = 1 + Math.floor(numChunks / groupSizeRadix)
+
     // constants
     const CONSTANTS = {
         NUM_SPLATS : numSplats,
@@ -83,6 +87,7 @@ async function main() {
         GROUPSIZE: groupSizeRadix,
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
+        NUM_SORTS : numRadixSorts,
     };
 
     console.table(CONSTANTS);
@@ -133,6 +138,15 @@ async function main() {
             radixTypes +
             sharedConstants +
             radixCompute
+        )
+    });
+
+    const radixOffsetModule = ctx.device.createShaderModule({
+        label: 'radix pass',
+        code: (
+            radixTypes +
+            sharedConstants +
+            radixOffsets
         )
     });
 
@@ -410,11 +424,29 @@ async function main() {
         },
     });
 
-    const pipelineRadix = ctx.device.createComputePipeline({
-        label: 'radix compute pipeline',
+    const pipelineRadix : GPUComputePipeline[] = []
+    for(let i : number = 0; i < CONSTANTS.NUM_SORTS; i++) {
+        pipelineRadix.push(
+            ctx.device.createComputePipeline({
+                label: 'radix compute pipeline',
+                layout: pipelineLayoutCompute,
+                compute: {
+                    module: radixModule,
+                    entryPoint: 'radixSort',
+                    constants: {
+                        pass_nr : i
+                    }
+                },
+            })
+        );
+    }
+
+
+    const pipelineRadixOffset = ctx.device.createComputePipeline({
+        label: 'radix offset compute pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: radixModule,
+            module: radixOffsetModule,
         },
     });
 
@@ -711,8 +743,14 @@ async function main() {
             pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
 
             // radix sort
-            pass.setPipeline(pipelineRadix);
-            pass.dispatchWorkgroups(1); // only one instance, this could be improved! with using storage buffers more?
+            pipelineRadix.forEach((pipeline : GPUComputePipeline) => {
+                pass.setPipeline(pipeline);
+                pass.dispatchWorkgroups(1); // only one instance, this could be improved? with using storage buffers more?
+            });
+
+            // calculate chunk offsets
+            pass.setPipeline(pipelineRadixOffset);
+            pass.dispatchWorkgroups(groupChunkRatio);
 
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
