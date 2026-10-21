@@ -4,6 +4,7 @@
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
+@group(0) @binding(9) var<storage, read_write> activeSplats : array<u32>;
 
 
 @compute @workgroup_size(GROUPSIZE, 1, 1)
@@ -18,7 +19,7 @@ fn cs(
     }
     workgroupBarrier();
 
-    if(i >= uniforms.activeSplats) {
+    if(i >= activeSplats[0]) {
         return;
     }
 
@@ -49,5 +50,5 @@ fn cs(
     let newC = initalParams.color - gradient.color;
     let newA = initalParams.alpha - gradient.alpha;
 
-    output[i] = Params(newQ, newS, newR, newC, newA);
+    output[i] = Params(newQ, newS, newR, newC, newA, 0u);
 }

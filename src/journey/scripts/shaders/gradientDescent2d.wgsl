@@ -134,7 +134,7 @@ fn GradLoss(
             let newC = initalParams.color - gradients[i].color;
             let newA = initalParams.alpha - gradients[i].alpha;
 
-            output[i] = Params(newQ, newS, newR, newC, newA);
+            output[i] = Params(newQ, newS, newR, newC, newA, 0u);
         }
 
     }
