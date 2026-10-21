@@ -27,6 +27,9 @@ import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
 import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
 import radixOffsets from '../shaders/radixChunkOffsets.wgsl?raw';
 
+import splatCheck from '../shaders/splatCheck.wgsl?raw';
+
+
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -57,7 +60,7 @@ async function main() {
 
     // number of splats
     const numSplats = 4000; // hard limit is 1 splat per pixel?
-    const activeSplats = 100;
+    const activeSplats = 2;
     const sampleDim = 128;
     const chunkWidth = 16;
     const chunkHeight = 16;
@@ -110,14 +113,14 @@ async function main() {
     const csBackwardsModule = ctx.device.createShaderModule({
         label: 'backwards pass',
         code: (
-            sharedConstants + 
-            shaderGradTypes + 
+            sharedConstants +
+            shaderGradTypes +
             radixTypes +
             generateAtomicOperations() + 
             shaderGaussFunctions + 
             adamShad +
             shaderCodeCompute
-        ) 
+        )
     });
 
     const adamModule = ctx.device.createShaderModule({
@@ -141,6 +144,17 @@ async function main() {
             shaderGaussFunctions +
             radixSetup
         ) 
+    });
+
+    const splatCheckModule = ctx.device.createShaderModule({
+        label: 'radix setup pass',
+        code: (
+            sharedConstants +
+            shaderGradTypes +
+            radixTypes +
+            shaderGaussFunctions +
+            splatCheck
+        )
     });
 
     const radixModule = ctx.device.createShaderModule({
@@ -205,8 +219,7 @@ async function main() {
                 .add('scale', "vec2f")
                 .add('rot', "f32")
                 .add('color', "vec3f")
-                .add('alpha', "f32")
-                .add('flag', "u32");
+                .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
 
     // i still cant do arrays of structs...
@@ -230,7 +243,7 @@ async function main() {
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
     // hacky way, please remove after paralleization
-    const hackySizeAdam = 2 * paramDesc.size;
+    const hackySizeAdam = 2 * paramDesc.size + 4.0;
     const adamMemoryDesc : UniformBufferDescriptor = {
         attributes : [],
         label: 'hacky adam memory',
@@ -364,6 +377,19 @@ async function main() {
         ],
     });
 
+    const bindGroupLayoutSplatCheck = ctx.device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: 'storage',
+                    minBindingSize: paramDesc.sizeBytes,
+                },
+            },
+        ],
+    });
+
     const bindGroupLayoutReduce = ctx.device.createBindGroupLayout({
         entries: [
             { // uniforms
@@ -388,6 +414,10 @@ async function main() {
 
     const pipelineLayoutComputeReduce = ctx.device.createPipelineLayout({
         bindGroupLayouts: [ bindGroupLayoutCompute ],
+    });
+
+    const pipelineLayoutSplatCheck = ctx.device.createPipelineLayout({
+        bindGroupLayouts: [ bindGroupLayoutCompute, bindGroupLayoutSplatCheck ],
     });
 
 
@@ -444,6 +474,30 @@ async function main() {
         compute: {
             module: radixSetupModule,
             entryPoint: 'registerSplats',
+            constants: {
+                first_pass: 0,
+            }
+        },
+    });
+
+    const pipelineSplatCheck1 = ctx.device.createComputePipeline({
+        label: 'splat check pipelie',
+        layout: pipelineLayoutSplatCheck,
+        compute: {
+            module: splatCheckModule,
+            entryPoint: 'cs',
+            constants: {
+                first_pass: 1,
+            }
+        },
+    });
+
+    const pipelineSplatCheck2 = ctx.device.createComputePipeline({
+        label: 'splat refine pipelie',
+        layout: pipelineLayoutSplatCheck,
+        compute: {
+            module: splatCheckModule,
+            entryPoint: 'cs',
             constants: {
                 first_pass: 0,
             }
@@ -559,6 +613,10 @@ async function main() {
     bufferManager.init(ctx.device);
 
     const paramBuffer = bufferManager.createBuffer(paramDesc);
+    const splatCheckBuffer = bufferManager.createBuffer({
+        ...paramDesc,
+        label: 'splat check ping-pong buffer',
+    });
 
     const posOff    = paramDesc.attributes[0].offset;
     const scaleOff  = paramDesc.attributes[1].offset;
@@ -596,21 +654,21 @@ async function main() {
         }
     }
 
-    randomSplatInit(activeSplats);
+    // randomSplatInit(activeSplats);
 
-    // // gauss 1
-    // input.set([0.9, 0.3], posOff);
-    // input.set([1.5, 1.5], scaleOff);
-    // input.set([0.0], rotOff);
-    // input.set([8.0, 1.0, 1.0], colorOff);
-    // input.set([4.0], alphaOff);
+    // gauss 1
+    input.set([0.9, 0.3], posOff);
+    input.set([1.5, 1.5], scaleOff);
+    input.set([0.0], rotOff);
+    input.set([8.0, 1.0, 1.0], colorOff);
+    input.set([4.0], alphaOff);
 
-    // // gauss 2
-    // input.set([0.3, 0.6], nextUnit + posOff);
-    // input.set([0.7, 1.0], nextUnit + scaleOff);
-    // input.set([0.0], nextUnit + rotOff);
-    // input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
-    // input.set([4.0], nextUnit + alphaOff);
+    // gauss 2
+    input.set([0.3, 0.6], nextUnit + posOff);
+    input.set([0.7, 1.0], nextUnit + scaleOff);
+    input.set([0.0], nextUnit + rotOff);
+    input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
+    input.set([4.0], nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
@@ -681,7 +739,7 @@ async function main() {
     });
     // == texture stuff
 
-    const testImageUrl = 'assets/jeff.jpg';
+    const testImageUrl = 'assets/overlappImage.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -715,6 +773,14 @@ async function main() {
             { binding: 8, resource: radixBuff },
             { binding: 9, resource: activeSplatsBuff },
         ]
+    });
+
+    const bindGroupSplatCheck = ctx.device.createBindGroup({
+        label: 'bindGroup splat check ping-pong',
+        layout: pipelineSplatCheck1.getBindGroupLayout(1),
+        entries: [
+            { binding: 0, resource: splatCheckBuffer },
+        ],
     });
 
     const bindGroupForward = ctx.device.createBindGroup({
@@ -840,9 +906,21 @@ async function main() {
             passRender.end();
         }
 
-        // todo
         // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
+        const passRefine = encoder.beginComputePass({
+            label: 'refine step compute pass',
+        });
+        passRefine.setPipeline(pipelineSplatCheck1);
+        passRefine.setBindGroup(0, bindGroupBackwards);
+        passRefine.setBindGroup(1, bindGroupSplatCheck);
+        passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+        // again the same thing
+        passRefine.setPipeline(pipelineSplatCheck2);
+        passRefine.setBindGroup(0, bindGroupBackwards);
+        passRefine.setBindGroup(1, bindGroupSplatCheck);
+        passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
 
+        passRefine.end();
         // change active splats #activeSplats' = #activeSplats + #high_variance 
         //  create new splats
 
