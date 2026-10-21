@@ -4,6 +4,7 @@ struct Params {
     rot : f32,
     color : vec3f,
     alpha: f32,
+    flag: u32, // [0: fine, 1: remove, 2: dublicate] 
 };
 
 struct Grad {  
@@ -43,5 +44,6 @@ struct AdamParams {
 
 struct Uniform {
     adamP: AdamParams,
-    activeSplats: u32,
+    alphaCutOff : f32,
+    posGradThresh : f32,
 };
