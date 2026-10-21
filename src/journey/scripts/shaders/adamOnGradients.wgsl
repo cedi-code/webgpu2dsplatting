@@ -50,5 +50,5 @@ fn cs(
     let newC = initalParams.color - gradient.color;
     let newA = initalParams.alpha - gradient.alpha;
 
-    output[i] = Params(newQ, newS, newR, newC, newA, 0u);
+    output[i] = Params(newQ, newS, newR, newC, newA);
 }

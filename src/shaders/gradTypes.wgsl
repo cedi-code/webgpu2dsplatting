@@ -4,7 +4,6 @@ struct Params {
     rot : f32,
     color : vec3f,
     alpha: f32,
-    flag: u32, // [0: fine, 1: remove, 2: dublicate] 
 };
 
 struct Grad {  
