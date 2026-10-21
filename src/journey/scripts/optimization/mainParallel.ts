@@ -56,8 +56,8 @@ async function main() {
     }
 
     // number of splats
-    const numSplats = 40; // hard limit is 1 splat per pixel?
-    const activeSplats = 30;
+    const numSplats = 4000; // hard limit is 1 splat per pixel?
+    const activeSplats = 100;
     const sampleDim = 128;
     const chunkWidth = 16;
     const chunkHeight = 16;
@@ -72,7 +72,7 @@ async function main() {
     const maxSplatsPerChunk = Math.min(numSplats, 256);
 
     // logb(a) = logc(a) / locc(b)
-    const numRadixSorts = 1 + Math.floor(Math.log(numChunks) / Math.log(radixElements));
+    const numRadixSorts = 1 + Math.floor(Math.log(numChunks) / Math.log(groupSizeRadix));
     const groupChunkRatio = 1 + Math.floor(numChunks / groupSizeRadix)
 
     // constants
@@ -98,6 +98,7 @@ async function main() {
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
         NUM_SORTS : numRadixSorts,
+        OFF_CANVAS_TRHESHOLD : 1.5, // distance of canvas border 1.0 means canvas border
     };
 
     console.table(CONSTANTS);
@@ -204,7 +205,8 @@ async function main() {
                 .add('scale', "vec2f")
                 .add('rot', "f32")
                 .add('color', "vec3f")
-                .add('alpha', "f32");
+                .add('alpha', "f32")
+                .add('flag', "u32");
     const paramDesc = paramBuilder.build();
 
     // i still cant do arrays of structs...
@@ -228,7 +230,7 @@ async function main() {
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
     // hacky way, please remove after paralleization
-    const hackySizeAdam = 2 * paramDesc.size + 4.0; // + 4.0 because of the t variable
+    const hackySizeAdam = 2 * paramDesc.size;
     const adamMemoryDesc : UniformBufferDescriptor = {
         attributes : [],
         label: 'hacky adam memory',
@@ -242,8 +244,13 @@ async function main() {
             .add('b1', "f32")
             .add('b2', "f32")
             .add('eps', "f32")
-            .add('activeSplats', "u32");
+            .add('alphaCutOff', "f32")
+            .add('gradientVari', "f32");
     const uniDesc = uniBuild.build();
+
+    const activeSplatsBuild = new UniformBufferDescriptorBuilder('active splats', "storage", "copy_src_dst");
+    activeSplatsBuild.add('activeSplats', "u32");
+    const activeSplatsDesc = activeSplatsBuild.build();
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
     radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
@@ -344,6 +351,14 @@ async function main() {
             buffer: {
                 type: 'storage',
                 minBindingSize: radixDesc.sizeBytes,
+            }
+            },
+            { // active splats
+            binding: 9,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: activeSplatsDesc.sizeBytes,
             }
             },
         ],
@@ -637,17 +652,20 @@ async function main() {
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
     const uniV = new ArrayBuffer(uniDesc.sizeBytes);
-    const uniVAdam = new Float32Array(uniV, uniDesc.attributes[0].offsetBytes, 4);
-    const uniVActiveSplats = new Uint32Array(uniV, uniDesc.attributes[4].offsetBytes, 1);
-    uniVAdam.set([
+    const uniVfloat = new Float32Array(uniV, uniDesc.attributes[0].offsetBytes, 6);
+    uniVfloat.set([
         0.05,
         0.9,
         0.999,
-        MACHINE_EPSILON
+        MACHINE_EPSILON,
+        0.1, // alpha cutoff
+        0.002, // positional gradient cutoff 
     ]);
-    uniVActiveSplats[0] = activeSplats;
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
+
+    const activeSplatsBuff = bufferManager.createBuffer(activeSplatsDesc);
+    ctx.device.queue.writeBuffer(activeSplatsBuff, 0, new Uint32Array([activeSplats]));
 
     // radix buffer setup
 
@@ -695,6 +713,7 @@ async function main() {
             { binding: 6, resource: adamMemBuffer},
             { binding: 7, resource: uniBuff },
             { binding: 8, resource: radixBuff },
+            { binding: 9, resource: activeSplatsBuff },
         ]
     });
 
@@ -798,11 +817,6 @@ async function main() {
             pass.setPipeline(pipelineBackwardsCompute);
             pass.dispatchWorkgroups(chunksX, chunksY);
 
-
-            // radix sort but on the splats
-
-            // sum up the data array
-
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
             pass.dispatchWorkgroups(activeSplats);
@@ -825,6 +839,12 @@ async function main() {
 
             passRender.end();
         }
+
+        // todo
+        // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
+
+        // change active splats #activeSplats' = #activeSplats + #high_variance 
+        //  create new splats
 
         // copy buffer to cpu (expensive!)
         encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
