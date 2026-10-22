@@ -3,6 +3,8 @@
 @group(0) @binding(5) var<storage, read_write> gradients: array<Grad, MAX_SLOTS>; 
 @group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
+@group(0) @binding(9) var<storage, read_write> drawBuffer : array<u32>;
+
 
 override first_pass: bool;
 var<workgroup> groupOffset : atomic<u32>;
@@ -10,6 +12,9 @@ var<workgroup> sums: array<u32, GROUPSIZE>;
 
 const NUM_256 = (NUM_DISPATCHES + GROUPSIZE - 1u) / GROUPSIZE;
 
+fn copySplat(splat : Params) -> Params {
+    return Params(splat.pos, splat.scale, splat.rot, splat.color, splat.alpha);
+}
 
 @compute @workgroup_size(GROUPSIZE, 1, 1)
 fn cs(
@@ -34,11 +39,10 @@ fn cs(
 
     // == cutoff checks ==
 
-    let maxScreenOff = uniforms.posGradThresh;
     let maxAlpha = uniforms.posGradThresh;
 
-    let screenMin = 1.0 - maxScreenOff;
-    let screenMax = maxScreenOff;
+    let screenMin = 1.0 - OFF_CANVAS_TRHESHOLD; // (1.0 - 1.5) = -0.5
+    let screenMax = OFF_CANVAS_TRHESHOLD;
 
     let offScreen =
         any(splatP.pos < vec2f(screenMin)) ||
@@ -51,6 +55,7 @@ fn cs(
     // == Gradient check ==
 
     let posGrad = gradient.pos / n;
+    let scaleGrad = gradient.scale / n;
 
     let refineFlag =
         any(abs(posGrad) >= vec2f(uniforms.posGradThresh));
@@ -86,6 +91,7 @@ fn cs(
         if(local_id == GROUPSIZE - 1) { // last thread does it
             radixMem.splatOffsets[workgroup_id.x] = sums[local_id];
         }
+
         return; // stops here
     }
 
@@ -99,14 +105,39 @@ fn cs(
     }
     workgroupBarrier();
 
+    // last thread
+    if(workgroup_id.x == NUM_DISPATCHES-1u && local_id == GROUPSIZE-1u) {
+        let newNumSplats = atomicLoad(&groupOffset)  + sums[local_id];
+        drawBuffer[1] = newNumSplats;
+        drawBuffer[4] = newNumSplats;
+
+    }
+
     if(removeFlag) {
         return; 
     }
 
     let currOff = atomicLoad(&groupOffset) + sums[local_id] - select(1u, 2u, refineFlag);
 
+
     if(refineFlag) {
-        // refine i will do that 
+        // densification!
+        var splat2 = copySplat(splatP);
+        if(any(abs(scaleGrad) >= vec2f(uniforms.scaleGradThresh))) {
+            // overconstruction
+            splatP.pos -= posGrad * 0.5;
+            splat2.pos += posGrad * 0.5;
+            splatP.scale /= SCALE_DIVIDE_CONST;
+            splat2.scale /= SCALE_DIVIDE_CONST;
+
+        }
+        else {
+            // underconstruction
+            splatP.pos -= posGrad * 1;
+            splat2.pos += posGrad * 1;
+            splat2.color *= 2;
+        }
+        splats[currOff + 1u] = splat2;
     }
 
     splats[currOff] = splatP;

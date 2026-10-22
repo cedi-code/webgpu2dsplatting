@@ -23,7 +23,7 @@ struct SplatInfo {
 }
 
 fn getSplatInfo(global_id: u32) -> SplatInfo {
-    if (global_id >= activeSplats[0]) {
+    if (global_id >= drawBuffer[1]) {
         return SplatInfo(0u, vec4(0)); // out-of-bounds threads return 0
     }
 
@@ -54,7 +54,7 @@ fn getSplatInfo(global_id: u32) -> SplatInfo {
 @group(0) @binding(0) var<storage, read_write> splats : array<Params, NUM_SPLATS>;
 @group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
-@group(0) @binding(9) var<storage, read_write> activeSplats : array<u32>;
+@group(0) @binding(9) var<storage, read_write> drawBuffer : array<u32>;
 
 override first_pass: bool;
 var<workgroup> sums: array<u32, GROUPSIZE>;
@@ -112,12 +112,12 @@ fn registerSplats(
     // then we write into radix sort memory
     var currOff = atomicLoad(&groupOffset) + sums[local_id] - splatInfo.allocate;
 
-    if (global_invocation_id.x >= activeSplats[0]) { // no writing when thread is not splat anymore!
+    if (global_invocation_id.x >= drawBuffer[1]) { // no writing when thread is not splat anymore!
         return;
     }
 
     // hacky way to store the total data size
-    if(global_invocation_id.x == activeSplats[0]-1u) {
+    if(global_invocation_id.x == drawBuffer[1]-1u) {
         radixMem.splatOffsets[NUM_DISPATCHES-1u] = atomicLoad(&groupOffset) + sums[local_id];
     }
 

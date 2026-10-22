@@ -11,7 +11,8 @@ function render(
     vertexBuffer?: GPUBuffer,
     numVert? : number,
     numInstances? : number,
-    ownAttachment? : boolean
+    ownAttachment? : boolean,
+    drawBuffer? : GPUBuffer,
     ) {
 
     if(!ctx.renderPassDescriptor) return;
@@ -35,7 +36,12 @@ function render(
     pass.setPipeline(pipeline);
     if(vertexBuffer) pass.setVertexBuffer(0, vertexBuffer); // we might have multiple vertex buffers!
     if(bindGroup) pass.setBindGroup(0, bindGroup); // we might have multiple bind groups!
-    pass.draw(numVert || 0, numInstances || 1);
+    if(drawBuffer) {
+        pass.drawIndirect(drawBuffer, 0);
+    }
+    else {
+        pass.draw(numVert || 0, numInstances || 1);
+    }
     pass.end();
 
     const commandBuffer = encoder.finish();

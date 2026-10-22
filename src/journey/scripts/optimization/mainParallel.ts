@@ -27,7 +27,7 @@ import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
 import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
 import radixOffsets from '../shaders/radixChunkOffsets.wgsl?raw';
 
-import splatCheck from '../shaders/splatCheck.wgsl?raw';
+import splatRefine from '../shaders/splatRefine.wgsl?raw';
 
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
@@ -102,6 +102,7 @@ async function main() {
         NUM_DISPATCHES : radixSetupDispatches,
         NUM_SORTS : numRadixSorts,
         OFF_CANVAS_TRHESHOLD : 1.5, // distance of canvas border 1.0 means canvas border
+        SCALE_DIVIDE_CONST : 1.6, // this is from the paper?
     };
 
     console.table(CONSTANTS);
@@ -153,7 +154,7 @@ async function main() {
             shaderGradTypes +
             radixTypes +
             shaderGaussFunctions +
-            splatCheck
+            splatRefine
         )
     });
 
@@ -175,7 +176,7 @@ async function main() {
         )
     });
 
-    const reduceModule = ctx.device.createShaderModule({
+    const reduceRadixModule = ctx.device.createShaderModule({
         label: 'reduce pass',
         code: (
             sharedConstants + 
@@ -258,12 +259,22 @@ async function main() {
             .add('b2', "f32")
             .add('eps', "f32")
             .add('alphaCutOff', "f32")
-            .add('gradientVari', "f32");
+            .add('gradientPosVari', "f32")
+            .add('gradinetScalVari', "f32");
+
     const uniDesc = uniBuild.build();
 
-    const activeSplatsBuild = new UniformBufferDescriptorBuilder('active splats', "storage", "copy_src_dst");
-    activeSplatsBuild.add('activeSplats', "u32");
-    const activeSplatsDesc = activeSplatsBuild.build();
+    const drawArgsBuilder = new UniformBufferDescriptorBuilder('active splats', "storage", "copy_src_dst");
+    drawArgsBuilder.add('vertexCount', "u32")
+            .add('instanceCount', "u32")
+            .add('vertexOff', "u32")
+            .add('instanceOff', "u32")
+            .add('padding', "u32")
+            .add('workgroupX', "u32")
+            .add('workgroupY', "u32")
+            .add('workgroupZ', "u32");
+
+    const drawArgsDesc = drawArgsBuilder.build();
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
     radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
@@ -371,7 +382,94 @@ async function main() {
             visibility: GPUShaderStage.COMPUTE,
             buffer: {
                 type: 'storage',
-                minBindingSize: activeSplatsDesc.sizeBytes,
+                minBindingSize: drawArgsDesc.sizeBytes,
+            }
+            },
+        ],
+    });
+
+
+    const bindGroupLayoutComputeReduce = ctx.device.createBindGroupLayout({
+        entries: [
+            { // dataOutput
+            binding: 0,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: paramDesc.sizeBytes,
+            },
+            },
+            { // sampler
+            binding: 1,
+            visibility: GPUShaderStage.COMPUTE,
+            sampler: {
+                    type: "filtering", // type for 'rgba8unorm'
+                },
+            },
+            { // goal texture
+            binding: 2,
+            visibility: GPUShaderStage.COMPUTE,
+            texture: {
+                    sampleType: "float", // type for 'rgba8unorm'
+                    viewDimension: "2d",
+                    multisampled: false,
+            },
+            },
+            { // lossOutput
+            binding: 3,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: lossBuffDesc.sizeBytes,
+            },
+            },
+            {
+            binding: 4, // forward texture
+            visibility: GPUShaderStage.COMPUTE,
+            texture: {
+                    sampleType: "float", // type for 'rgba8unorm'
+                    viewDimension: "2d",
+                    multisampled: false,
+            },
+            },
+            { // gradients
+            binding: 5,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: gradStorageDesc.sizeBytes, 
+            },
+            },
+            { // adam memory
+            binding: 6,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: adamMemoryDesc.sizeBytes,
+            },
+            },
+            { // uniforms
+            binding: 7,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'uniform',
+                minBindingSize: uniDesc.sizeBytes,
+            }
+            },
+            { // radix memory
+            binding: 8,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'storage',
+                minBindingSize: radixDesc.sizeBytes,
+            }
+            },
+            { // active splats
+            binding: 9,
+            visibility: GPUShaderStage.COMPUTE,
+            buffer: {
+                type: 'read-only-storage',
+                minBindingSize: drawArgsDesc.sizeBytes,
             }
             },
         ],
@@ -412,8 +510,9 @@ async function main() {
         bindGroupLayouts: [ bindGroupLayoutCompute ],
     });
 
-    const pipelineLayoutComputeReduce = ctx.device.createPipelineLayout({
-        bindGroupLayouts: [ bindGroupLayoutCompute ],
+    const pipelineLayoutComputeReduceLayout = ctx.device.createPipelineLayout({
+        label: 'special reduce layout',
+        bindGroupLayouts: [ bindGroupLayoutComputeReduce ],
     });
 
     const pipelineLayoutSplatCheck = ctx.device.createPipelineLayout({
@@ -540,15 +639,15 @@ async function main() {
 
     const pipelineReduceCompute  = ctx.device.createComputePipeline({
         label: 'reduce gradients compute pipeline',
-        layout: pipelineLayoutComputeReduce,
+        layout: pipelineLayoutComputeReduceLayout,
         compute: {
-            module: reduceModule,
+            module: reduceRadixModule,
         },
     }); 
 
     const pipelineReduceLossCompute = ctx.device.createComputePipeline({
         label: 'reduce loss pipeline',
-        layout: pipelineLayoutComputeReduce,
+        layout: pipelineLayoutCompute,
         compute: {
             module: reduceLossModule,
         }
@@ -657,18 +756,18 @@ async function main() {
     // randomSplatInit(activeSplats);
 
     // gauss 1
-    input.set([0.9, 0.3], posOff);
-    input.set([1.5, 1.5], scaleOff);
-    input.set([0.0], rotOff);
-    input.set([8.0, 1.0, 1.0], colorOff);
-    input.set([4.0], alphaOff);
+    input.set([0.9, 0.3],       posOff);
+    input.set([1.5, 1.5],       scaleOff);
+    input.set([0.0],            rotOff);
+    input.set([8.0, 1.0, 1.0],  colorOff);
+    input.set([4.0],            alphaOff);
 
     // gauss 2
-    input.set([0.3, 0.6], nextUnit + posOff);
-    input.set([0.7, 1.0], nextUnit + scaleOff);
-    input.set([0.0], nextUnit + rotOff);
-    input.set([1.0, 1.0, 8.0], nextUnit + colorOff);
-    input.set([4.0], nextUnit + alphaOff);
+    input.set([0.3, 0.6],       nextUnit + posOff);
+    input.set([0.7, 1.0],       nextUnit + scaleOff);
+    input.set([0.0],            nextUnit + rotOff);
+    input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
+    input.set([4.0],            nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
@@ -709,21 +808,44 @@ async function main() {
     // == uniform stuff for interaction ==
 
     const uniBuff = bufferManager.createBuffer(uniDesc);
-    const uniV = new ArrayBuffer(uniDesc.sizeBytes);
-    const uniVfloat = new Float32Array(uniV, uniDesc.attributes[0].offsetBytes, 6);
-    uniVfloat.set([
+    const uniV = new Float32Array(uniDesc.size);
+    console.log(uniDesc.sizeBytes);
+    uniV.set([
         0.05,
         0.9,
         0.999,
         MACHINE_EPSILON,
         0.1, // alpha cutoff
         0.002, // positional gradient cutoff 
-    ]);
+        0.2,
+    ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
 
-    const activeSplatsBuff = bufferManager.createBuffer(activeSplatsDesc);
-    ctx.device.queue.writeBuffer(activeSplatsBuff, 0, new Uint32Array([activeSplats]));
+    // draw buffer for indirect draw
+    const drawBuffer = ctx.device.createBuffer({
+        size: drawArgsDesc.sizeBytes,
+        usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, 
+    });
+    const drawArgs = new Uint32Array(drawArgsDesc.size);
+    drawArgs[0] = 6; // vertex count
+    drawArgs[1] = activeSplats; // instance count
+    drawArgs[2] = 0; // first vertex (offset)
+    drawArgs[3] = 0; // first instance (offset)
+    drawArgs[4] = activeSplats; // workgroupX
+    drawArgs[5] = 1; // workgroupY
+    drawArgs[6] = 1; // workgroupZ
+    drawArgs[7] = 0; // hacky padding
+    
+
+    ctx.device.queue.writeBuffer(drawBuffer, 0, drawArgs, 0);
+
+        // for testing purposes
+    const activeSplatsBuffRead = ctx.device.createBuffer({
+        label: 'active splat read buffer',
+        size: drawArgsDesc.sizeBytes,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    });
 
     // radix buffer setup
 
@@ -771,7 +893,24 @@ async function main() {
             { binding: 6, resource: adamMemBuffer},
             { binding: 7, resource: uniBuff },
             { binding: 8, resource: radixBuff },
-            { binding: 9, resource: activeSplatsBuff },
+            { binding: 9, resource: drawBuffer },
+        ]
+    });
+
+    const bindGroupReduce = ctx.device.createBindGroup({
+        label: 'bindGroup backwards pass',
+        layout: pipelineReduceCompute.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: paramBuffer },
+            { binding: 1, resource: sampler },
+            { binding: 2, resource: texture },
+            { binding: 3, resource: lossBuffer },
+            { binding: 4, resource: textureForward },
+            { binding: 5, resource: gradientBuffer },
+            { binding: 6, resource: adamMemBuffer},
+            { binding: 7, resource: uniBuff },
+            { binding: 8, resource: radixBuff },
+            { binding: 9, resource: drawBuffer },
         ]
     });
 
@@ -837,11 +976,11 @@ async function main() {
 
     // render in texture
     ctx.renderPassDescriptor = renderPassDescriptorTexture;
-    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, true);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, true, drawBuffer);
 
     // renders on screen
     ctx.renderPassDescriptor = renderPassDescriptorScreen;
-    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
 
     let runGD = async () => {
         const start = performance.now();
@@ -885,10 +1024,13 @@ async function main() {
 
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
-            pass.dispatchWorkgroups(activeSplats);
+            pass.setBindGroup(0, bindGroupReduce);
+            pass.dispatchWorkgroupsIndirect(drawBuffer, 16); // hacky but start at the workgroup offset
+            // pass.dispatchWorkgroups(activeSplats);
 
             // reduce loss
             pass.setPipeline(pipelineReduceLossCompute);
+            pass.setBindGroup(0, bindGroupBackwards);
             pass.dispatchWorkgroups(1);
             
             // adam
@@ -901,7 +1043,7 @@ async function main() {
             const passRender = encoder.beginRenderPass(renderPassDescriptorTexture);
             passRender.setPipeline(pipeLineForward);
             passRender.setBindGroup(0, bindGroupForward);
-            passRender.draw(6, activeSplats);
+            passRender.drawIndirect(drawBuffer, 0);
 
             passRender.end();
         }
@@ -916,8 +1058,6 @@ async function main() {
         passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
         // again the same thing
         passRefine.setPipeline(pipelineSplatCheck2);
-        passRefine.setBindGroup(0, bindGroupBackwards);
-        passRefine.setBindGroup(1, bindGroupSplatCheck);
         passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
 
         passRefine.end();
@@ -927,13 +1067,14 @@ async function main() {
         // copy buffer to cpu (expensive!)
         encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
         encoder.copyBufferToBuffer(radixBuff, 0, radixBuffRead, 0, radixBuffRead.size);
+        encoder.copyBufferToBuffer(drawBuffer, 0, activeSplatsBuffRead, 0, activeSplatsBuffRead.size);
         // run the work lmao
         const commandBuffer = encoder.finish();
         ctx.device.queue.submit([commandBuffer]);
         
         // display on canvas
         ctx.renderPassDescriptor = renderPassDescriptorScreen;
-        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats);
+        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
 
         await ctx.device.queue.onSubmittedWorkDone();
 
@@ -943,6 +1084,8 @@ async function main() {
         // get loss
         await updateLossResults();   
         
+        // debug
+        readAndPrintBuff(activeSplatsBuffRead, Uint32Array);
         
     }
     // == interactive suff, not really needed
