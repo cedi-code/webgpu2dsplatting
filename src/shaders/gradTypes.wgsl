@@ -45,4 +45,5 @@ struct Uniform {
     adamP: AdamParams,
     alphaCutOff : f32,
     posGradThresh : f32,
+    scaleGradThresh : f32,
 };

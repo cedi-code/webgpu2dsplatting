@@ -4,7 +4,7 @@
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
-@group(0) @binding(9) var<storage, read_write> activeSplats : array<u32>;
+@group(0) @binding(9) var<storage, read_write> drawBuffer : array<u32>;
 
 
 @compute @workgroup_size(GROUPSIZE, 1, 1)
@@ -19,7 +19,7 @@ fn cs(
     }
     workgroupBarrier();
 
-    if(i >= activeSplats[0]) {
+    if(i >= drawBuffer[1]) { // drawBuffer index one is # instances
         return;
     }
 
