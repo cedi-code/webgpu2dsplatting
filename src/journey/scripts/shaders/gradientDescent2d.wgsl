@@ -3,14 +3,14 @@ const NUM_SPLATS = 2;
 const xRAY = false;
 
 
-struct Uniform {
+struct Uniforms {
     adamP : AdamParams,
 };
 
 @group(0) @binding(0) var<storage, read_write> output: array<Params>;
 @group(0) @binding(1) var ourSampler: sampler;
 @group(0) @binding(2) var goalTexture: texture_2d<f32>;
-@group(0) @binding(3) var<uniform> uniforms : Uniform;
+@group(0) @binding(3) var<uniform> uniforms : Uniforms;
 @group(0) @binding(4) var<storage, read_write> lossOutput : array<f32>;
 @group(0) @binding(5) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(6) var forwardTexture : texture_2d<f32>; 
