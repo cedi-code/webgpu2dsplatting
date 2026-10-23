@@ -59,14 +59,18 @@ async function main() {
     }
 
     // number of splats
-    const numSplats = 4000; // hard limit is 1 splat per pixel?
-    const activeSplats = 2;
-    const sampleDim = 128;
+    const numSplats = 2000; // hard limit is 1 splat per pixel?
+    const activeSplats = 300;
+    const sampleDim = 512;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
     const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
     const numChunks = chunksX * chunksY;
+
+    const gradientPosThresh = 0.0002;
+    const gradientScaleThresh = 0.02;
+    const alphaCutoff = 0.2;
 
     const radixElements = 3; // splat id, chunk id, permutation id
     const groupSizeRadix = 256;
@@ -88,7 +92,7 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 100,
+        nSteps : 5,
         TILE_SCALE: 4,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
@@ -101,9 +105,9 @@ async function main() {
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
         NUM_SORTS : numRadixSorts,
-        OFF_CANVAS_TRHESHOLD : 1.2, // distance of canvas border 1.0 means canvas border
+        OFF_CANVAS_TRHESHOLD : 1.001, // distance of canvas border 1.0 means canvas border
         SCALE_DIVIDE_CONST : 1.6, // this is from the paper?
-        REFINE_AFTER_STEPS: 20,
+        REFINE_AFTER_STEPS: 50,
     };
 
     console.table(CONSTANTS);
@@ -744,6 +748,21 @@ async function main() {
 
     const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
 
+    const testImageUrl = 'assets/jeff.jpg';
+    const source = await loadImageBitmap(testImageUrl);
+    const texture = ctx.device.createTexture({
+        label: testImageUrl,
+        format: 'rgba8unorm',
+        size: [source.width, source.height],
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    ctx.device.queue.copyExternalImageToTexture(
+        { source, flipY: false },
+        { texture },
+        { width: source.width, height: source.height }
+    );
+
     const posOff    = paramDesc.attributes[0].offset;
     const scaleOff  = paramDesc.attributes[1].offset;
     const rotOff    = paramDesc.attributes[2].offset;
@@ -780,21 +799,88 @@ async function main() {
         }
     }
 
+    function imagePriorSplats(
+        n: number,
+        image: ImageData,
+    ) {
+        const { width, height, data } = image;
+        const cols = Math.ceil(Math.sqrt(n * width / height));
+        const rows = Math.ceil(n / cols);
+        const scaleX = width / cols;
+        const scaleY = height / rows;
+        const logScaleX = Math.log(6000 / scaleX);
+        const logScaleY = Math.log(6000 / scaleY);
+
+        for (let i = 0; i < n; i++) {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+
+            const x0 = Math.floor(col * width / cols);
+            const x1 = Math.floor((col + 1) * width / cols);
+            const y0 = Math.floor(row * height / rows);
+            const y1 = Math.floor((row + 1) * height / rows);
+
+            input.set([
+                (col + 0.5) / cols,
+                (row + 0.5) / rows,
+            ], posOff + unitS * i);
+
+            input.set(
+                [logScaleX, logScaleY],
+                scaleOff + unitS * i
+            );
+
+            input.set([0], rotOff + unitS * i);
+
+            let r = 0, g = 0, b = 0, count = 0;
+
+            for (let y = y0; y < y1; y++) {
+                for (let x = x0; x < x1; x++) {
+                    const idx = (y * width + x) * 4;
+
+                    r += data[idx] / 255;
+                    g += data[idx + 1] / 255;
+                    b += data[idx + 2] / 255;
+                    count++;
+                }
+            }
+            input.set([
+                r / count * 8,
+                g / count * 8,
+                b / count * 8,
+            ], colorOff + unitS * i);
+
+            input.set([4], alphaOff + unitS * i);
+        }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width;
+    canvas.height = source.height;
+
+    const ctx2d = canvas.getContext("2d")!;
+    ctx2d.drawImage(source, 0, 0);
+
+    const image = ctx2d.getImageData(
+        0, 0, source.width, source.height
+    );
+
+    imagePriorSplats(activeSplats, image)
+
     // randomSplatInit(activeSplats);
 
-    // // gauss 1
-    input.set([0.9, 0.3],       posOff);
-    input.set([1.5, 1.5],       scaleOff);
-    input.set([0.0],            rotOff);
-    input.set([8.0, 1.0, 1.0],  colorOff);
-    input.set([4.0],            alphaOff);
+    // // // gauss 1
+    // input.set([0.9, 0.3],       posOff);
+    // input.set([1.5, 1.5],       scaleOff);
+    // input.set([0.0],            rotOff);
+    // input.set([8.0, 1.0, 1.0],  colorOff);
+    // input.set([4.0],            alphaOff);
 
-    // gauss 2
-    input.set([0.3, 0.6],       nextUnit + posOff);
-    input.set([0.7, 1.0],       nextUnit + scaleOff);
-    input.set([0.0],            nextUnit + rotOff);
-    input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
-    input.set([4.0],            nextUnit + alphaOff);
+    // // gauss 2
+    // input.set([0.3, 0.6],       nextUnit + posOff);
+    // input.set([0.7, 1.0],       nextUnit + scaleOff);
+    // input.set([0.0],            nextUnit + rotOff);
+    // input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
+    // input.set([4.0],            nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
@@ -842,9 +928,9 @@ async function main() {
         0.9,
         0.999,
         MACHINE_EPSILON,
-        0.1, // alpha cutoff
-        0.0002, // positional gradient cutoff 
-        0.02, // scale gradient cutoff
+        alphaCutoff, // alpha cutoff
+        gradientPosThresh, // positional gradient cutoff 
+        gradientScaleThresh, // scale gradient cutoff
     ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
@@ -888,20 +974,7 @@ async function main() {
     });
     // == texture stuff
 
-    const testImageUrl = 'assets/greenSquare.jpg';
-    const source = await loadImageBitmap(testImageUrl);
-    const texture = ctx.device.createTexture({
-        label: testImageUrl,
-        format: 'rgba8unorm',
-        size: [source.width, source.height],
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-    });
 
-    ctx.device.queue.copyExternalImageToTexture(
-        { source, flipY: false },
-        { texture },
-        { width: source.width, height: source.height }
-    );
 
     const sampler = ctx.device.createSampler();
 
