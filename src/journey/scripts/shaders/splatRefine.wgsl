@@ -1,6 +1,13 @@
+struct MomentumPair {
+    m: Grad,
+    v: Grad,
+};
+
 @group(0) @binding(0) var<storage, read_write> splats: array<Params>;
 @group(1) @binding(0) var<storage, read_write> splatsPingPong: array<Params>;
+@group(1) @binding(1) var<storage, read_write> momentumPingPong: array<MomentumPair>;
 @group(0) @binding(5) var<storage, read_write> gradients: array<Grad, MAX_SLOTS>; 
+@group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
 @group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 @group(0) @binding(9) var<storage, read_write> drawBuffer : array<u32>;
@@ -29,17 +36,23 @@ fn cs(
     let gradient = gradients[gradientOff];
     
     var splatP: Params;
+    var mGrad : Grad;
+    var vGrad : Grad;
     if(first_pass) {
         splatP = splats[splat_id];
+        mGrad = adamMemory.m[splat_id];
+        vGrad = adamMemory.v[splat_id];
     } else {
         splatP = splatsPingPong[splat_id];
+        mGrad = momentumPingPong[splat_id].m;
+        vGrad = momentumPingPong[splat_id].v;
     }
 
     let n = f32(sampleDim * sampleDim);
 
     // == cutoff checks ==
 
-    let maxAlpha = uniforms.posGradThresh;
+    let maxAlpha = uniforms.alphaCutOff;
 
     let screenMin = 1.0 - OFF_CANVAS_TRHESHOLD; // (1.0 - 1.5) = -0.5
     let screenMax = OFF_CANVAS_TRHESHOLD;
@@ -86,6 +99,7 @@ fn cs(
 
     if(first_pass) {
         splatsPingPong[splat_id] = splatP;
+        momentumPingPong[splat_id] = MomentumPair(mGrad, vGrad);
 
         // store total sum in a storage buffer
         if(local_id == GROUPSIZE - 1) { // last thread does it
@@ -113,11 +127,12 @@ fn cs(
 
     }
 
-    if(removeFlag) {
-        return; 
-    }
 
     let currOff = atomicLoad(&groupOffset) + sums[local_id] - select(1u, 2u, refineFlag);
+
+    if(removeFlag || currOff >= NUM_SPLATS-2u) {
+        return; 
+    }
 
 
     if(refineFlag) {
@@ -127,19 +142,20 @@ fn cs(
             // overconstruction
             splatP.pos -= posGrad * 0.5;
             splat2.pos += posGrad * 0.5;
-            splatP.scale /= SCALE_DIVIDE_CONST;
-            splat2.scale /= SCALE_DIVIDE_CONST;
+            const DOWNSCALE_BY = log(SCALE_DIVIDE_CONST);
+            splatP.scale += DOWNSCALE_BY; // /= SCALE_DIVIDE_CONST;
+            splat2.scale += DOWNSCALE_BY; // /= SCALE_DIVIDE_CONST;
 
         }
         else {
             // underconstruction
-            splatP.pos -= posGrad * 1;
-            splat2.pos += posGrad * 1;
-            splat2.color *= 2;
+            splatP.pos -= posGrad * 0.5;
+            splat2.pos += posGrad * 0.5;
         }
         splats[currOff + 1u] = splat2;
     }
 
     splats[currOff] = splatP;
-
+    adamMemory.m[currOff] = mGrad;
+    adamMemory.v[currOff] = vGrad;
 }

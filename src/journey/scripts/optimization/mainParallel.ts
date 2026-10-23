@@ -101,8 +101,9 @@ async function main() {
         BARRIERS: barriersPrefixSum,
         NUM_DISPATCHES : radixSetupDispatches,
         NUM_SORTS : numRadixSorts,
-        OFF_CANVAS_TRHESHOLD : 1.5, // distance of canvas border 1.0 means canvas border
+        OFF_CANVAS_TRHESHOLD : 1.2, // distance of canvas border 1.0 means canvas border
         SCALE_DIVIDE_CONST : 1.6, // this is from the paper?
+        REFINE_AFTER_STEPS: 20,
     };
 
     console.table(CONSTANTS);
@@ -154,6 +155,7 @@ async function main() {
             shaderGradTypes +
             radixTypes +
             shaderGaussFunctions +
+            adamShad + 
             splatRefine
         )
     });
@@ -222,6 +224,21 @@ async function main() {
                 .add('color', "vec3f")
                 .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
+
+    const accumulatedGradStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numSplats);
+    accumulatedGradStorageBuilder.add('pos', "vec2f")
+                .add('scale', "vec2f")
+                .add('rot', "f32")
+                .add('color', "vec3f")
+                .add('alpha', "f32");
+    const accumulatedGradStorageDesc = accumulatedGradStorageBuilder.build();
+    const momentumPingPongDesc: UniformBufferDescriptor = {
+        attributes: [],
+        label: 'refine momentum ping-pong buffer',
+        size: accumulatedGradStorageDesc.size * 2,
+        sizeBytes: accumulatedGradStorageDesc.sizeBytes * 2,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    };
 
     // i still cant do arrays of structs...
     const gradientStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.MAX_SLOTS );
@@ -485,6 +502,14 @@ async function main() {
                     minBindingSize: paramDesc.sizeBytes,
                 },
             },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: 'storage',
+                    minBindingSize: momentumPingPongDesc.sizeBytes,
+                },
+            },
         ],
     });
 
@@ -717,6 +742,8 @@ async function main() {
         label: 'splat check ping-pong buffer',
     });
 
+    const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
+
     const posOff    = paramDesc.attributes[0].offset;
     const scaleOff  = paramDesc.attributes[1].offset;
     const rotOff    = paramDesc.attributes[2].offset;
@@ -755,7 +782,7 @@ async function main() {
 
     // randomSplatInit(activeSplats);
 
-    // gauss 1
+    // // gauss 1
     input.set([0.9, 0.3],       posOff);
     input.set([1.5, 1.5],       scaleOff);
     input.set([0.0],            rotOff);
@@ -816,8 +843,8 @@ async function main() {
         0.999,
         MACHINE_EPSILON,
         0.1, // alpha cutoff
-        0.002, // positional gradient cutoff 
-        0.2,
+        0.0002, // positional gradient cutoff 
+        0.02, // scale gradient cutoff
     ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
@@ -861,7 +888,7 @@ async function main() {
     });
     // == texture stuff
 
-    const testImageUrl = 'assets/overlappImage.jpg';
+    const testImageUrl = 'assets/greenSquare.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -919,6 +946,7 @@ async function main() {
         layout: pipelineSplatCheck1.getBindGroupLayout(1),
         entries: [
             { binding: 0, resource: splatCheckBuffer },
+            { binding: 1, resource: momentumPingPongBuffer },
         ],
     });
 
@@ -982,6 +1010,7 @@ async function main() {
     ctx.renderPassDescriptor = renderPassDescriptorScreen;
     render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
 
+    let refineStep = 0;
     let runGD = async () => {
         const start = performance.now();
         console.log("start");
@@ -1046,24 +1075,29 @@ async function main() {
             passRender.drawIndirect(drawBuffer, 0);
 
             passRender.end();
+
+            ctx.renderPassDescriptor = renderPassDescriptorScreen;
+            render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+            refineStep++;
+            if(refineStep >= CONSTANTS.REFINE_AFTER_STEPS) {
+                console.log("refine")
+                // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
+                const passRefine = encoder.beginComputePass({
+                    label: 'refine step compute pass',
+                });
+                passRefine.setPipeline(pipelineSplatCheck1);
+                passRefine.setBindGroup(0, bindGroupBackwards);
+                passRefine.setBindGroup(1, bindGroupSplatCheck);
+                passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+                // again the same thing
+                passRefine.setPipeline(pipelineSplatCheck2);
+                passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+
+                passRefine.end();
+                refineStep = 0;
+            }
         }
-
-        // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
-        const passRefine = encoder.beginComputePass({
-            label: 'refine step compute pass',
-        });
-        passRefine.setPipeline(pipelineSplatCheck1);
-        passRefine.setBindGroup(0, bindGroupBackwards);
-        passRefine.setBindGroup(1, bindGroupSplatCheck);
-        passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
-        // again the same thing
-        passRefine.setPipeline(pipelineSplatCheck2);
-        passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
-
-        passRefine.end();
-        // change active splats #activeSplats' = #activeSplats + #high_variance 
-        //  create new splats
-
+        
         // copy buffer to cpu (expensive!)
         encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
         encoder.copyBufferToBuffer(radixBuff, 0, radixBuffRead, 0, radixBuffRead.size);
