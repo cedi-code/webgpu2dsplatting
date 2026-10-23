@@ -60,7 +60,7 @@ async function main() {
 
     // number of splats
     const numSplats = 2000; // hard limit is 1 splat per pixel?
-    const activeSplats = 300;
+    const activeSplats = 1000;
     const sampleDim = 512;
     const chunkWidth = 16;
     const chunkHeight = 16;
@@ -92,7 +92,7 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 5,
+        nSteps : 3,
         TILE_SCALE: 4,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
@@ -206,6 +206,7 @@ async function main() {
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
         code: (
+            sharedConstants +
             shaderGradTypes +
             shaderGaussFunctions + 
             gaussTileVertStorage
@@ -748,7 +749,7 @@ async function main() {
 
     const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
 
-    const testImageUrl = 'assets/jeff.jpg';
+    const testImageUrl = 'assets/cat.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -808,8 +809,8 @@ async function main() {
         const rows = Math.ceil(n / cols);
         const scaleX = width / cols;
         const scaleY = height / rows;
-        const logScaleX = Math.log(6000 / scaleX);
-        const logScaleY = Math.log(6000 / scaleY);
+        const logScaleX = Math.log(3000 / scaleX);
+        const logScaleY = Math.log(3000 / scaleY);
 
         for (let i = 0; i < n; i++) {
             const col = i % cols;
@@ -845,9 +846,9 @@ async function main() {
                 }
             }
             input.set([
-                r / count * 8,
-                g / count * 8,
-                b / count * 8,
+                 8,
+                 8,
+                 8,
             ], colorOff + unitS * i);
 
             input.set([4], alphaOff + unitS * i);
@@ -1152,7 +1153,7 @@ async function main() {
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
             render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
             refineStep++;
-            if(refineStep >= CONSTANTS.REFINE_AFTER_STEPS) {
+            if(refineStep == CONSTANTS.REFINE_AFTER_STEPS) {
                 console.log("refine")
                 // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
                 const passRefine = encoder.beginComputePass({

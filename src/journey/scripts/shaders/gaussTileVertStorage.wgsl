@@ -18,8 +18,6 @@ const tile = array<vec2f, 6>(
 
 @group(0) @binding(0) var<storage, read> output: array<Params>;
 
-const TILE_SCALE = 4.0;
-
 @vertex fn vs(
     @builtin(vertex_index) i : u32,
     @builtin(instance_index) j : u32,
@@ -39,7 +37,7 @@ const TILE_SCALE = 4.0;
     let col : vec3f = vecSigmoid(splat.color);
     let alpha : f32 = sigmoid(splat.alpha, 4.0);
 
-    let gaussZ : f32 = 1.0 - f32(j+1) / 1000.0;
+    let gaussZ : f32 = 1.0 - f32(j + 1u) / f32(NUM_SPLATS);
 
     return SimpleVertexShaderOutput(
         vec4f(posGaussNDC, gaussZ, 1.0),
