@@ -5,6 +5,7 @@
 @group(0) @binding(4) var forwardTexture : texture_2d<f32>; 
 @group(0) @binding(5) var<storage, read_write> gradientStorage : array<Grad, MAX_SLOTS>; 
 @group(0) @binding(6) var<storage, read_write> adamMemory : AdamMemory;
+@group(0) @binding(7) var<uniform> uniforms : Uniform;
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
 
@@ -33,11 +34,19 @@ fn readInvId(index : u32) -> u32 {
 }
 
 fn Loss(gColor: vec4f, imgC: vec4f) -> f32 {
-    return (
-        (gColor.r - imgC.r) * (gColor.r - imgC.r) + 
-        (gColor.g - imgC.g) * (gColor.g - imgC.g) + 
-        (gColor.b - imgC.b) * (gColor.b - imgC.b)
-    ) / 3.0;;
+    let l2 = (
+            (gColor.r - imgC.r) * (gColor.r - imgC.r) + 
+            (gColor.g - imgC.g) * (gColor.g - imgC.g) + 
+            (gColor.b - imgC.b) * (gColor.b - imgC.b)
+        ) / 3.0;
+    
+    let l1 = (
+            (gColor.r - imgC.r) + 
+            (gColor.g - imgC.g) + 
+            (gColor.b - imgC.b)
+        ) / 3.0;
+    
+    return (1.0 - uniforms.lossWeight) * l2 + (uniforms.lossWeight) * l1;
 }
 
 fn GradLoss(
@@ -122,12 +131,18 @@ fn computeGD(
 
         atomicAddf32_workgroup_u(&loss, (Loss(gColor, color)));
 
-        let colorGrad = vec3f(
-            (gColor.r - colorPreMult.r),
-            (gColor.g - colorPreMult.g),
-            (gColor.b - colorPreMult.b),
-        );
-
+        let colorGradL1 : vec3f = sign(vec3f(
+                (gColor.r - colorPreMult.r),
+                (gColor.g - colorPreMult.g),
+                (gColor.b - colorPreMult.b),
+            ));
+        let colorGradL2 : vec3f = (vec3f(
+                (gColor.r - colorPreMult.r),
+                (gColor.g - colorPreMult.g),
+                (gColor.b - colorPreMult.b),
+            ));
+        let colorGrad = (1.0 - uniforms.lossWeight) * colorGradL2 + (uniforms.lossWeight) * colorGradL1;
+    
         var oneMinusAlpha = 1.0;
         var background = gColor.rgb;
         for(var i = numSplats; i > 0u; i--) {

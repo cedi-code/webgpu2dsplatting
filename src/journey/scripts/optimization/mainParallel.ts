@@ -15,7 +15,7 @@ import { generateAtomicOperations } from '../../../myutils/ShaderTemplating';
 import shaderCodeCompute from '../shaders/gradientBackwardsCompute.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
 import gaussTileVertStorage from '../shaders/gaussTileVertStorage.wgsl?raw';
-import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
+import gaussFrag from '../shaders/gaussFragBlob.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
 import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
 import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
@@ -58,14 +58,17 @@ async function main() {
     }
 
     // number of splats
-    const numSplats = 200; // hard limit is 1 splat per pixel?
-    const activeSplats = 2;
-    const sampleDim = 128;
+    const numSplats = 4000; // hard limit is 1 splat per pixel?
+    const activeSplats = 1000;
+    const sampleDim = 512;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
     const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
     const numChunks = chunksX * chunksY;
+
+    const maxSteps = 100;
+    const refineAfter = 200;
 
     const gradientPosThresh = 0.0002;
     const gradientScaleThresh = 0.0002;
@@ -91,7 +94,7 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 50,
+        nSteps : maxSteps,
         TILE_SCALE: 4,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
@@ -106,7 +109,7 @@ async function main() {
         NUM_SORTS : numRadixSorts,
         OFF_CANVAS_TRHESHOLD : 1.001, // distance of canvas border 1.0 means canvas border
         SCALE_DIVIDE_CONST : 1.6, // this is from the paper?
-        REFINE_AFTER_STEPS: 200,
+        OPACITY_PERCENTAGE : 0.6,
     };
 
     console.table(CONSTANTS);
@@ -217,7 +220,7 @@ async function main() {
 
     const fsModule = ctx.device.createShaderModule({
         label: 'simple texture frag impl',
-        code: (gaussFrag) 
+        code: (sharedConstants + gaussFrag) 
     });
 
 
@@ -281,7 +284,8 @@ async function main() {
             .add('eps', "f32")
             .add('alphaCutOff', "f32")
             .add('gradientPosVari', "f32")
-            .add('gradinetScalVari', "f32");
+            .add('gradinetScalVari', "f32")
+            .add('weightedLoss', "f32");
 
     const uniDesc = uniBuild.build();
 
@@ -515,22 +519,7 @@ async function main() {
                 },
             },
         ],
-    });
-
-    const bindGroupLayoutReduce = ctx.device.createBindGroupLayout({
-        entries: [
-            { // uniforms
-            binding: 0,
-            visibility: GPUShaderStage.COMPUTE,
-            buffer: {
-                type: 'uniform',
-                minBindingSize: reduceUniDesc.sizeBytes,
-            }
-            },
-        ]
-    });
-
-    
+    });    
     const pipelineLayoutForward = ctx.device.createPipelineLayout({
         bindGroupLayouts: [ bindGroupLayoutDescriptorsForward ],
     });
@@ -550,7 +539,7 @@ async function main() {
 
 
     // == creating the pipelines
-    const pipeLineForward = ctx.device.createRenderPipeline({
+    const pipelineForwardDescriptor : GPURenderPipelineDescriptor = {
         label: 'texture result pipeline',
         layout: pipelineLayoutForward,
         vertex: {
@@ -576,13 +565,21 @@ async function main() {
                     },
                 }
             }],
+            constants: {
+                withFade: 1,
+            }
         },
         depthStencil: {
             depthWriteEnabled: true,
             depthCompare: 'less',
             format: 'depth24plus',
         }
-    });
+    };
+    const pipeLineForward = ctx.device.createRenderPipeline(pipelineForwardDescriptor);
+
+    pipelineForwardDescriptor.fragment!.constants = { withFade: 0 };
+
+    const pipeLineForwardBlob = ctx.device.createRenderPipeline(pipelineForwardDescriptor);  
 
     const pipelineRadixSetup1 = ctx.device.createComputePipeline({
         label: 'radix setup pipeline',
@@ -748,7 +745,7 @@ async function main() {
 
     const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
 
-    const testImageUrl = 'assets/fourBlobs.jpg';
+    const testImageUrl = 'assets/jeff.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -843,23 +840,23 @@ async function main() {
         }
     }
 
-    // imageGridSplats(activeSplats, source.width, source.height);
+    imageGridSplats(activeSplats, source.width, source.height);
 
     // randomSplatInit(activeSplats);
 
-    // gauss 1
-    input.set([0.9, 0.3],       posOff);
-    input.set([1.5, 1.5],       scaleOff);
-    input.set([0.0],            rotOff);
-    input.set([8.0, 1.0, 1.0],  colorOff);
-    input.set([4.0],            alphaOff);
+    // // gauss 1
+    // input.set([0.9, 0.3],       posOff);
+    // input.set([1.5, 1.5],       scaleOff);
+    // input.set([0.0],            rotOff);
+    // input.set([8.0, 1.0, 1.0],  colorOff);
+    // input.set([4.0],            alphaOff);
 
-    // gauss 2
-    input.set([0.3, 0.6],       nextUnit + posOff);
-    input.set([0.7, 1.0],       nextUnit + scaleOff);
-    input.set([0.0],            nextUnit + rotOff);
-    input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
-    input.set([4.0],            nextUnit + alphaOff);
+    // // gauss 2
+    // input.set([0.3, 0.6],       nextUnit + posOff);
+    // input.set([0.7, 1.0],       nextUnit + scaleOff);
+    // input.set([0.0],            nextUnit + rotOff);
+    // input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
+    // input.set([4.0],            nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
@@ -910,6 +907,7 @@ async function main() {
         alphaCutoff, // alpha cutoff
         gradientPosThresh, // positional gradient cutoff 
         gradientScaleThresh, // scale gradient cutoff
+        0.0
     ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
@@ -1010,16 +1008,12 @@ async function main() {
         ]
     });
     
-    type Output = {
-        initalQ : number,
-        finalQ: number,
-        lossLog: number,
-    }
 
-    const PARAMS_OUT : Output = {
-        initalQ : 0.5,
-        finalQ: 0.0,
-        lossLog: 0.0,
+    const PARAMS_GUI = {
+        blobs : false,
+        lossWeight : 0.0,
+        nSteps : maxSteps,
+        refineSteps : refineAfter,
     }
 
 
@@ -1043,9 +1037,9 @@ async function main() {
         // read loss output
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
-        lossData.push(...result.subarray(0, CONSTANTS.nSteps));
+        lossData.push(...result.subarray(0, PARAMS_GUI.nSteps));
         const lastStep = lossSteps.at(-1) ?? 0;
-        lossSteps.push(...[...Array(CONSTANTS.nSteps).keys()].map((v) => v + lastStep));
+        lossSteps.push(...[...Array(PARAMS_GUI.nSteps).keys()].map((v) => v + lastStep));
         
         lossPlot.setData([lossSteps, lossData]);
 
@@ -1072,7 +1066,7 @@ async function main() {
         });
         encoder.clearBuffer(lossBuffer, 0, lossBuffDesc.sizeBytes);
 
-        for(let i = 0; i < CONSTANTS.nSteps; i++) {
+        for(let i = 0; i < PARAMS_GUI.nSteps; i++) {
 
             // reset the gradients, maybe do this in the shader and not here?
             encoder.clearBuffer(gradientBuffer, 0, gradDesc.sizeBytes);
@@ -1131,7 +1125,7 @@ async function main() {
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
             render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
             refineStep++;
-            if(refineStep == CONSTANTS.REFINE_AFTER_STEPS) {
+            if(refineStep >= PARAMS_GUI.refineSteps) {
                 console.log("refine")
                 // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
                 const passRefine = encoder.beginComputePass({
@@ -1160,7 +1154,8 @@ async function main() {
         
         // display on canvas
         ctx.renderPassDescriptor = renderPassDescriptorScreen;
-        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+        
+        render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
 
         await ctx.device.queue.onSubmittedWorkDone();
 
@@ -1176,25 +1171,46 @@ async function main() {
     }
     // == interactive suff, not really needed
     {
-        // const PARAMS = {
-        //     stepSize: 0.3,
-        // };
         
         const pane = new Pane({
             container: document.getElementById("gd-sliders") as HTMLElement,
         });
 
 
-        pane.addBinding(PARAMS_OUT, 'initalQ', {
-            readonly: true,
+
+        pane.addBinding(PARAMS_GUI, 'blobs', {
+            label: 'show blobs',
+        }).on('change', (ev) => {
+            let showBlob = ev.value;
+            ctx.renderPassDescriptor = renderPassDescriptorScreen;
+            render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+
         });
 
-        pane.addBinding(PARAMS_OUT, 'finalQ', {
-            readonly: true,
+        pane.addBinding(PARAMS_GUI, 'lossWeight', {
+            label: 'L2 <-> L1',
+            min: 0.0,
+            max: 1.0,
+            step: 0.1,
         });
+
+        pane.addBinding(PARAMS_GUI, 'nSteps', {
+            label: 'gd steps',
+            min: 1,
+            max: CONSTANTS.nSteps,
+            step: 1,
+        });
+
+        pane.addBinding(PARAMS_GUI, 'refineSteps', {
+            label: 'refine after:',
+            min: 1,
+            max: 1000,
+        });
+
+
 
         pane.addButton({
-            title: 'gd step',
+            title: 'gradient descent',
             label: 'step'
         }).on('click', async () => {
             await runGD();
