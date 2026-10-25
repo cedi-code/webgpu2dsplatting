@@ -59,8 +59,8 @@ async function main() {
 
     // number of splats
     const numSplats = 4000; // hard limit is 1 splat per pixel?
-    const activeSplats = 1000;
-    const sampleDim = 512;
+    const activeSplats = 200;
+    const sampleDim = 128;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
@@ -68,11 +68,13 @@ async function main() {
     const numChunks = chunksX * chunksY;
 
     const maxSteps = 100;
-    const refineAfter = 200;
+    const refineAfter = 400;
 
-    const gradientPosThresh = 0.0002;
-    const gradientScaleThresh = 0.0002;
-    const alphaCutoff = 0.2;
+    const gradientPosThresh = 0.02;
+    const gradientScaleThresh = 0.02;
+    const eigenVAspectThresh = 6.0; 
+    const eigenVAspectTrheshMax = 50.0;
+    const alphaCutoff = 0.1;
 
     const radixElements = 3; // splat id, chunk id, permutation id
     const groupSizeRadix = 256;
@@ -285,6 +287,8 @@ async function main() {
             .add('alphaCutOff', "f32")
             .add('gradientPosVari', "f32")
             .add('gradinetScalVari', "f32")
+            .add('eigenVAspectThresh', "f32")
+            .add('eigenVAspectTrheshMax', "f32")
             .add('weightedLoss', "f32");
 
     const uniDesc = uniBuild.build();
@@ -907,7 +911,9 @@ async function main() {
         alphaCutoff, // alpha cutoff
         gradientPosThresh, // positional gradient cutoff 
         gradientScaleThresh, // scale gradient cutoff
-        0.0
+        eigenVAspectThresh, // how diagnoal my splat can be
+        eigenVAspectTrheshMax, // how thinn i allow them to be!
+        0.0, // loss wieght L2 <-> L1
     ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);

@@ -23,7 +23,7 @@ fn copySplat(splat : Params) -> Params {
     return Params(splat.pos, splat.scale, splat.rot, splat.color, splat.alpha);
 }
 
-fn firstEigenVec(varMat : mat2x2f) -> vec2f {
+fn eigenValues(varMat : mat2x2f) -> vec2f {
     // varMat is symetric
     // first eigen value is det(A - \lambda * I) = 0
     // A = ( a, c // c, b )
@@ -34,14 +34,26 @@ fn firstEigenVec(varMat : mat2x2f) -> vec2f {
     // lambda_1,2 = 0.5 * ((a+b) +- sqrt((a+b)^2 - 4*(ab - c^2)))
     // we want the bigger eigen value and sqrt > 0 so we take +?
     // lambda_1 = 0.5 * (a+b + sqrt((a-b)^2 + 4c^2))
-
-    // v1 = [ (\lambda_1 - b), c ]
     
     let a = varMat[0].x;
     let b = varMat[1].y;
     let c = varMat[0].y;
 
-    let lambda1 = 0.5 * ((a + b) + sqrt((a-b)*(a-b) + 4.0 * c * c));
+    let D = max(0.0, (a-b)*(a-b) + 4.0 * c * c);
+    let Dsqrt = sqrt(D);
+    let lambda1 = 0.5 * ((a + b) + Dsqrt);
+    let lambda2 = 0.5 * ((a + b) - Dsqrt);
+
+    return vec2f(lambda1, lambda2);
+}
+
+fn firstEigenVec(varMat : mat2x2f, lambda1 : f32, lambda2 : f32) -> vec2f {
+
+    // v1 = [ (\lambda_1 - b), c ]
+
+    let a = varMat[0].x;
+    let b = varMat[1].y;
+    let c = varMat[0].y;
 
     let v1 = vec2f(lambda1 - b , c);
     let v2 = vec2f(c , lambda1 - a);
@@ -84,6 +96,11 @@ fn cs(
 
     let n = f32(sampleDim * sampleDim);
 
+    let sMat2 = mat2x2f(exp(-2.0 * splatP.scale).x, 0.0, 0.0, exp(-2.0 * splatP.scale).y);
+    let rMat = rotMat(splatP.rot);
+    let varMat = rMat * sMat2 * transpose(rMat);
+    let eigenVals = eigenValues(varMat);
+
     // == cutoff checks ==
 
     let maxAlpha = uniforms.alphaCutOff;
@@ -97,16 +114,25 @@ fn cs(
 
     let lowAlpha = splatP.alpha < maxAlpha;
 
-    let removeFlag = offScreen || lowAlpha;
+    let aspectMaxCheck = eigenVals.x > (eigenVals.y * uniforms.eigenVAspectThreshMax);
+
+
+    let removeFlag = offScreen || lowAlpha || aspectMaxCheck;
 
     // == Gradient check ==
 
     let posGrad = gradient.pos / n;
     let scaleGrad = gradient.scale / n;
 
-    let refineFlag =
-        any(abs(posGrad) >= vec2f(uniforms.posGradThresh)) || 
-        any(abs(scaleGrad) >= vec2f(uniforms.scaleGradThresh));
+
+
+    let scaleGradFlag = any(abs(scaleGrad) >= vec2f(uniforms.scaleGradThresh));
+    let posGradFlag = any(abs(posGrad) >= vec2f(uniforms.posGradThresh));
+    let aspectCheck = eigenVals.x > (eigenVals.y * uniforms.eigenVAspectThresh);
+
+    let refineFlag = posGradFlag || 
+                     scaleGradFlag ||
+                     aspectCheck;
 
     // == Flag assignment ==
     sums[local_id] = 0;
@@ -174,15 +200,13 @@ fn cs(
         // densification!
         var splat2 = copySplat(splatP);
 
-        let sMat2 = mat2x2f(exp(-2.0 * splatP.scale).x, 0.0, 0.0, exp(-2.0 * splatP.scale).y);
-        let rMat = rotMat(splatP.rot);
-        let varMat = rMat * sMat2 * transpose(rMat);
-        let eigenV = firstEigenVec(varMat);
 
-        if(any(abs(scaleGrad) >= vec2f(uniforms.scaleGradThresh))) {
+        if(scaleGradFlag || aspectCheck) {
             // overconstruction
-            splatP.pos -= eigenV;
-            splat2.pos += eigenV;
+            let eigenVec = firstEigenVec(varMat, eigenVals.x, eigenVals.y);
+            
+            splatP.pos -= eigenVec;
+            splat2.pos += eigenVec;
 
             const DOWNSCALE_BY = log(SCALE_DIVIDE_CONST); // SCALE_DIVIDE_CONST
 
@@ -195,7 +219,7 @@ fn cs(
             let alpha : f32 = 1.0 - sqrt(1.0 - sigmoid(splatP.alpha, 4.0));
             splat2.alpha = sigmoidInv(alpha, 4.0);
             splatP.alpha = sigmoidInv(alpha, 4.0);
-            // splat2.pos -= gradDir * stdGradDir * MOVE_BY;
+            // splat2.pos -= gradDir * stdGradDir * 0.5;
         }
         splats[currOff + 1u] = splat2;
     }
