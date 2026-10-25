@@ -14,6 +14,10 @@ fn sigmoid(x : f32, off : f32) -> f32 {
     return 1.0 / (1.0 + exp(-x + off));
 }
 
+fn sigmoidInv(y : f32, off : f32) -> f32 {
+    return off - log(max(1.0e-5,1.0 - y)) + log(max(1.0e-5,y));
+}
+
 fn vecSigmoid(x : vec3f) -> vec3f {
     return vec3f(
         sigmoid(x.r, 4.0),

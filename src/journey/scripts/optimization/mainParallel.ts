@@ -19,7 +19,6 @@ import gaussFrag from '../shaders/gaussFrag.wgsl?raw';
 import adamShad from '../../../shaders/adam.wgsl?raw';
 import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
 import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
-import reduceCompute from '../shaders/reduceGradients.wgsl?raw';
 import radixSetup from '../shaders/radixSetup.wgsl?raw';
 import radixCompute from '../shaders/radixSort.wgsl?raw';
 import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
@@ -59,9 +58,9 @@ async function main() {
     }
 
     // number of splats
-    const numSplats = 2000; // hard limit is 1 splat per pixel?
-    const activeSplats = 1000;
-    const sampleDim = 512;
+    const numSplats = 200; // hard limit is 1 splat per pixel?
+    const activeSplats = 2;
+    const sampleDim = 128;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
@@ -69,7 +68,7 @@ async function main() {
     const numChunks = chunksX * chunksY;
 
     const gradientPosThresh = 0.0002;
-    const gradientScaleThresh = 0.02;
+    const gradientScaleThresh = 0.0002;
     const alphaCutoff = 0.2;
 
     const radixElements = 3; // splat id, chunk id, permutation id
@@ -92,7 +91,7 @@ async function main() {
         chunkHeight: chunkHeight,
         numChunksW : chunksX,
         numChunksH : chunksY,
-        nSteps : 3,
+        nSteps : 50,
         TILE_SCALE: 4,
         MAX_SPLATS_CHUNK : maxSplatsPerChunk,
         // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
@@ -107,7 +106,7 @@ async function main() {
         NUM_SORTS : numRadixSorts,
         OFF_CANVAS_TRHESHOLD : 1.001, // distance of canvas border 1.0 means canvas border
         SCALE_DIVIDE_CONST : 1.6, // this is from the paper?
-        REFINE_AFTER_STEPS: 50,
+        REFINE_AFTER_STEPS: 200,
     };
 
     console.table(CONSTANTS);
@@ -749,7 +748,7 @@ async function main() {
 
     const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
 
-    const testImageUrl = 'assets/cat.jpg';
+    const testImageUrl = 'assets/fourBlobs.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -800,11 +799,12 @@ async function main() {
         }
     }
 
-    function imagePriorSplats(
+    function imageGridSplats(
         n: number,
-        image: ImageData,
+        width : number,
+        height : number,
     ) {
-        const { width, height, data } = image;
+
         const cols = Math.ceil(Math.sqrt(n * width / height));
         const rows = Math.ceil(n / cols);
         const scaleX = width / cols;
@@ -833,18 +833,6 @@ async function main() {
 
             input.set([0], rotOff + unitS * i);
 
-            let r = 0, g = 0, b = 0, count = 0;
-
-            for (let y = y0; y < y1; y++) {
-                for (let x = x0; x < x1; x++) {
-                    const idx = (y * width + x) * 4;
-
-                    r += data[idx] / 255;
-                    g += data[idx + 1] / 255;
-                    b += data[idx + 2] / 255;
-                    count++;
-                }
-            }
             input.set([
                  8,
                  8,
@@ -854,34 +842,24 @@ async function main() {
             input.set([4], alphaOff + unitS * i);
         }
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = source.width;
-    canvas.height = source.height;
 
-    const ctx2d = canvas.getContext("2d")!;
-    ctx2d.drawImage(source, 0, 0);
-
-    const image = ctx2d.getImageData(
-        0, 0, source.width, source.height
-    );
-
-    imagePriorSplats(activeSplats, image)
+    // imageGridSplats(activeSplats, source.width, source.height);
 
     // randomSplatInit(activeSplats);
 
-    // // // gauss 1
-    // input.set([0.9, 0.3],       posOff);
-    // input.set([1.5, 1.5],       scaleOff);
-    // input.set([0.0],            rotOff);
-    // input.set([8.0, 1.0, 1.0],  colorOff);
-    // input.set([4.0],            alphaOff);
+    // gauss 1
+    input.set([0.9, 0.3],       posOff);
+    input.set([1.5, 1.5],       scaleOff);
+    input.set([0.0],            rotOff);
+    input.set([8.0, 1.0, 1.0],  colorOff);
+    input.set([4.0],            alphaOff);
 
-    // // gauss 2
-    // input.set([0.3, 0.6],       nextUnit + posOff);
-    // input.set([0.7, 1.0],       nextUnit + scaleOff);
-    // input.set([0.0],            nextUnit + rotOff);
-    // input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
-    // input.set([4.0],            nextUnit + alphaOff);
+    // gauss 2
+    input.set([0.3, 0.6],       nextUnit + posOff);
+    input.set([0.7, 1.0],       nextUnit + scaleOff);
+    input.set([0.0],            nextUnit + rotOff);
+    input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
+    input.set([4.0],            nextUnit + alphaOff);
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
