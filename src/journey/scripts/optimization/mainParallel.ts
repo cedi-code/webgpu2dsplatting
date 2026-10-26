@@ -24,7 +24,6 @@ import radixCompute from '../shaders/radixSort.wgsl?raw';
 import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
 import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
 import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
-import areaLossCompute from '../shaders/areaLossBackwards.wgsl?raw';
 import radixOffsets from '../shaders/radixChunkOffsets.wgsl?raw';
 import opacityReset from '../shaders/opacityReset.wgsl?raw';
 
@@ -62,7 +61,7 @@ async function main() {
     // number of splats
     const numSplats = 2000; // hard limit is 1 splat per pixel?
     const activeSplats = 1000;
-    const sampleDim = 512;
+    const sampleDim = 128;
     const chunkWidth = 16;
     const chunkHeight = 16;
     const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
@@ -76,10 +75,8 @@ async function main() {
     const gradientPosThresh = 0.002;
     const gradientScaleThresh = 0.02;
     const opacityResetV = 0.99; 
-    const eigenVAspectTrheshMax = 1.0; // i dont know these values, how big they actually should be...
     const alphaCutoff = 0.1;
     const scaleDivideConst = 1.6;
-    const areaLossWeightConst = 1.0; // 1.0 weight
 
     const radixElements = 3; // splat id, chunk id, permutation id
     const groupSizeRadix = 256;
@@ -134,18 +131,6 @@ async function main() {
             shaderGaussFunctions + 
             adamShad +
             shaderCodeCompute
-        )
-    });
-
-    const areaLossModule = ctx.device.createShaderModule({
-        label: 'area loss pass',
-        code: (
-            sharedConstants +
-            shaderGradTypes +
-            radixTypes +
-            adamShad +
-            shaderGaussFunctions +
-            areaLossCompute
         )
     });
 
@@ -306,10 +291,8 @@ async function main() {
             .add('gradientPosVari', "f32")
             .add('gradinetScalVari', "f32")
             .add('opacityReset', "f32")
-            .add('eigenVAspectTrheshMax', "f32")
             .add('scaleDivideConst', "f32")
-            .add('weightedLoss', "f32")
-            .add('areaLossWeight', "f32");
+            .add('weightedLoss', "f32");
 
     const uniDesc = uniBuild.build();
 
@@ -707,14 +690,6 @@ async function main() {
         }
     });
 
-    const pipelineAreaLossCompute = ctx.device.createComputePipeline({
-        label: 'area loss pipeline',
-        layout: pipelineLayoutCompute,
-        compute: {
-            module: areaLossModule,
-        },
-    });
-
     const pipelineAdamCompute = ctx.device.createComputePipeline({
         label: 'adam compute pipeline',
         layout: pipelineLayoutCompute,
@@ -952,10 +927,8 @@ async function main() {
         gradientPosThresh, // positional gradient cutoff 
         gradientScaleThresh, // scale gradient cutoff
         opacityResetV, // how diagnoal my splat can be
-        eigenVAspectTrheshMax, // how thinn i allow them to be!
         scaleDivideConst,
         0.0, // loss wieght L2 <-> L1
-        areaLossWeightConst, 
     ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
@@ -1075,7 +1048,6 @@ async function main() {
     const PARAMS_GUI = {
         blobs : false,
         lossWeight : 0.0,
-        lossAreaWeight: areaLossWeightConst,
         nSteps : maxSteps,
         refineSteps : refineAfter,
         doRefine : true,
@@ -1164,12 +1136,6 @@ async function main() {
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
             pass.dispatchWorkgroups(chunksX, chunksY);
-
-            if(PARAMS_GUI.lossAreaWeight > 0) {
-                pass.setPipeline(pipelineAreaLossCompute);
-                pass.dispatchWorkgroups(numChunks);
-            }
-
 
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
@@ -1282,14 +1248,6 @@ async function main() {
             step: 0.1,
         });
 
-        pane.addBinding(PARAMS_GUI, 'lossAreaWeight', {
-            min: 0.0,
-            max: 100.0,
-            step: 1.0
-        }).on('change', (ev) => {
-            updateUniform('areaLossWeight', ev.value);
-        })
-
         pane.addBinding(PARAMS_GUI, 'nSteps', {
             label: 'gd steps',
             min: 1,
@@ -1305,7 +1263,7 @@ async function main() {
             label: 'refine after:',
             min: 1,
             max: 1000,
-            step: 100,
+            step: 10,
         });
 
         refinePane.addBinding(PARAMS_GUI, "doRefine", {
@@ -1336,7 +1294,6 @@ async function main() {
             posGradThresh: gradientPosThresh,
             scaleGradThresh: gradientScaleThresh,
             opacityReset: opacityResetV,
-            eigenVAspectThreshMax: eigenVAspectTrheshMax,
             scaleDivideConst,
         };
 
@@ -1362,12 +1319,6 @@ async function main() {
             step: opacityResetV / 10,
         }).on('change', (ev) => {
             updateUniform('opacityReset', ev.value);
-        });
-
-        refineParams.addBinding(refineUniformParams, 'eigenVAspectThreshMax', {
-            step: eigenVAspectTrheshMax / 10,
-        }).on('change', (ev) => {
-            updateUniform('eigenVAspectTrheshMax', ev.value);
         });
 
         refineParams.addBinding(refineUniformParams, 'scaleDivideConst', {

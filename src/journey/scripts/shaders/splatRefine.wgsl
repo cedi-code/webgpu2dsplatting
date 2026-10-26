@@ -68,9 +68,6 @@ fn cs(
 
     let lowAlpha = splatP.alpha < maxAlpha;
 
-    // let aspectMaxCheck = eigenVals.x > uniforms.eigenVAspectThreshMax;
-
-
     let removeFlag = offScreen || lowAlpha;
 
     // == Gradient check ==
