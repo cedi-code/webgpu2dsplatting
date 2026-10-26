@@ -77,6 +77,7 @@ async function main() {
     const opacityResetV = 0.9; 
     const eigenVAspectTrheshMax = 0.2;
     const alphaCutoff = 0.1;
+    const scaleDivideConst = 1.6;
 
     const radixElements = 3; // splat id, chunk id, permutation id
     const groupSizeRadix = 256;
@@ -112,7 +113,6 @@ async function main() {
         NUM_DISPATCHES : radixSetupDispatches,
         NUM_SORTS : numRadixSorts,
         OFF_CANVAS_TRHESHOLD : 1.001, // distance of canvas border 1.0 means canvas border
-        SCALE_DIVIDE_CONST : 1.6, // this is from the paper?
         OPACITY_PERCENTAGE : 0.6,
     };
 
@@ -293,6 +293,7 @@ async function main() {
             .add('gradinetScalVari', "f32")
             .add('opacityReset', "f32")
             .add('eigenVAspectTrheshMax', "f32")
+            .add('scaleDivideConst', "f32")
             .add('weightedLoss', "f32");
 
     const uniDesc = uniBuild.build();
@@ -925,10 +926,26 @@ async function main() {
         gradientScaleThresh, // scale gradient cutoff
         opacityResetV, // how diagnoal my splat can be
         eigenVAspectTrheshMax, // how thinn i allow them to be!
+        scaleDivideConst,
         0.0, // loss wieght L2 <-> L1
     ], 0);
     
     ctx.device.queue.writeBuffer(uniBuff, 0, uniV, 0);
+
+    const updateUniform = (uniformName: string, value: number) => {
+        const uniform = uniDesc.attributes.find(({ name }) => name === uniformName);
+        if (!uniform) {
+            console.error("could not find the uniform with name:", uniformName);
+            return;
+        }
+
+        uniV[uniform.offset] = value;
+        ctx.device.queue.writeBuffer(
+            uniBuff,
+            uniform.offsetBytes,
+            new Float32Array([value]),
+        );
+    };
 
     // draw buffer for indirect draw
     const drawBuffer = ctx.device.createBuffer({
@@ -1032,7 +1049,9 @@ async function main() {
         lossWeight : 0.0,
         nSteps : maxSteps,
         refineSteps : refineAfter,
+        doRefine : true,
         opacitySteps: opacityResetAfter,
+        doOpacitiy : true,
     }
 
 
@@ -1145,7 +1164,7 @@ async function main() {
             // ctx.renderPassDescriptor = renderPassDescriptorScreen;
             // render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
             opacityStep++;
-            if(opacityStep >= PARAMS_GUI.opacitySteps) {
+            if(opacityStep >= PARAMS_GUI.opacitySteps && PARAMS_GUI.doOpacitiy) {
                 console.log("opacity Reset");
                 const passOpacity = encoder.beginComputePass({
                     label: 'refine step compute pass',
@@ -1159,7 +1178,7 @@ async function main() {
             }
 
             refineStep++;
-            if(refineStep >= PARAMS_GUI.refineSteps) {
+            if(refineStep >= PARAMS_GUI.refineSteps && PARAMS_GUI.doRefine) {
                 console.log("refine")
                 // pass that marks all splats outside of viewport as dead + marks all splats with high positional variance (should still be in the gradientBuffer)
                 const passRefine = encoder.beginComputePass({
@@ -1235,19 +1254,83 @@ async function main() {
             step: 1,
         });
 
-        pane.addBinding(PARAMS_GUI, 'refineSteps', {
+        const refinePane = pane.addFolder({
+            title: 'refinement'
+        });
+
+        const refineSlider = refinePane.addBinding(PARAMS_GUI, 'refineSteps', {
             label: 'refine after:',
             min: 1,
             max: 1000,
         });
 
-        pane.addBinding(PARAMS_GUI, 'opacitySteps', {
+        refinePane.addBinding(PARAMS_GUI, "doRefine", {
+            label: 'with refine'
+        }).on('change', (ev) => {
+            refineSlider.disabled = !ev.value;
+        });
+
+        const opacitiySlider = refinePane.addBinding(PARAMS_GUI, 'opacitySteps', {
             label: 'opacity after:',
             min: 1,
             max: 100,
         });
 
+        refinePane.addBinding(PARAMS_GUI, "doOpacitiy", {
+            label: 'with opacity refine'
+        }).on('change', (ev) => {
+            opacitiySlider.disabled = !ev.value;
+        });
 
+        const refineParams = refinePane.addFolder({
+            title: 'refinment params',
+            expanded: false,
+        })
+
+        const refineUniformParams = {
+            alphaCutOff: alphaCutoff,
+            posGradThresh: gradientPosThresh,
+            scaleGradThresh: gradientScaleThresh,
+            opacityReset: opacityResetV,
+            eigenVAspectThreshMax: eigenVAspectTrheshMax,
+            scaleDivideConst,
+        };
+
+        refineParams.addBinding(refineUniformParams, 'alphaCutOff', {
+            step: alphaCutoff / 10,
+        }).on('change', (ev) => {
+            updateUniform('alphaCutOff', ev.value);
+        });
+
+        refineParams.addBinding(refineUniformParams, 'posGradThresh', {
+            step: gradientPosThresh / 10,
+        }).on('change', (ev) => {
+            updateUniform('gradientPosVari', ev.value);
+        });
+
+        refineParams.addBinding(refineUniformParams, 'scaleGradThresh', {
+            step: gradientScaleThresh / 10,
+        }).on('change', (ev) => {
+            updateUniform('gradinetScalVari', ev.value);
+        });
+
+        refineParams.addBinding(refineUniformParams, 'opacityReset', {
+            step: opacityResetV / 10,
+        }).on('change', (ev) => {
+            updateUniform('opacityReset', ev.value);
+        });
+
+        refineParams.addBinding(refineUniformParams, 'eigenVAspectThreshMax', {
+            step: eigenVAspectTrheshMax / 10,
+        }).on('change', (ev) => {
+            updateUniform('eigenVAspectTrheshMax', ev.value);
+        });
+
+        refineParams.addBinding(refineUniformParams, 'scaleDivideConst', {
+            step: scaleDivideConst / 10,
+        }).on('change', (ev) => {
+            updateUniform('scaleDivideConst', ev.value);
+        });
 
         pane.addButton({
             title: 'gradient descent',

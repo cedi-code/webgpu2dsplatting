@@ -48,5 +48,6 @@ struct Uniform {
     scaleGradThresh : f32,
     opacityReset : f32,
     eigenVAspectThreshMax : f32,
+    scaleDivideConst : f32,
     lossWeight : f32, // 0 means L2 only, 1 means L1 only
 };

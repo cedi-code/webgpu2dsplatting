@@ -201,7 +201,7 @@ fn cs(
             splatP.pos -= eigenVec;
             splat2.pos += eigenVec;
 
-            const DOWNSCALE_BY = log(SCALE_DIVIDE_CONST); // SCALE_DIVIDE_CONST
+            let DOWNSCALE_BY = log(uniforms.scaleDivideConst);
 
             splatP.scale += DOWNSCALE_BY; // /= SCALE_DIVIDE_CONST;
             splat2.scale += DOWNSCALE_BY; // /= SCALE_DIVIDE_CONST;
