@@ -114,7 +114,7 @@ fn cs(
 
     let lowAlpha = splatP.alpha < maxAlpha;
 
-    let aspectMaxCheck = eigenVals.x > (eigenVals.y * uniforms.eigenVAspectThreshMax);
+    let aspectMaxCheck = eigenVals.x > uniforms.eigenVAspectThreshMax;
 
 
     let removeFlag = offScreen || lowAlpha || aspectMaxCheck;
@@ -124,16 +124,10 @@ fn cs(
     let posGrad = gradient.pos / n;
     let scaleGrad = gradient.scale / n;
 
-
-
     let scaleGradFlag = any(abs(scaleGrad) >= vec2f(uniforms.scaleGradThresh));
     let posGradFlag = any(abs(posGrad) >= vec2f(uniforms.posGradThresh));
-    let aspectCheck = eigenVals.x > (eigenVals.y * uniforms.eigenVAspectThresh);
-
     let refineFlag = posGradFlag || 
-                     scaleGradFlag ||
-                     aspectCheck;
-
+                     scaleGradFlag;
     // == Flag assignment ==
     sums[local_id] = 0;
     if(!removeFlag) {
@@ -195,13 +189,12 @@ fn cs(
         return; 
     }
 
-
     if(refineFlag) {
         // densification!
         var splat2 = copySplat(splatP);
 
 
-        if(scaleGradFlag || aspectCheck) {
+        if(scaleGradFlag) {
             // overconstruction
             let eigenVec = firstEigenVec(varMat, eigenVals.x, eigenVals.y);
             

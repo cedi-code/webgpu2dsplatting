@@ -25,6 +25,7 @@ import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
 import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
 import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
 import radixOffsets from '../shaders/radixChunkOffsets.wgsl?raw';
+import opacityReset from '../shaders/opacityReset.wgsl?raw';
 
 import splatRefine from '../shaders/splatRefine.wgsl?raw';
 
@@ -58,7 +59,7 @@ async function main() {
     }
 
     // number of splats
-    const numSplats = 4000; // hard limit is 1 splat per pixel?
+    const numSplats = 1000; // hard limit is 1 splat per pixel?
     const activeSplats = 200;
     const sampleDim = 128;
     const chunkWidth = 16;
@@ -68,12 +69,13 @@ async function main() {
     const numChunks = chunksX * chunksY;
 
     const maxSteps = 100;
-    const refineAfter = 400;
+    const refineAfter = 300;
+    const opacityResetAfter = 30;
 
-    const gradientPosThresh = 0.02;
+    const gradientPosThresh = 0.002;
     const gradientScaleThresh = 0.02;
-    const eigenVAspectThresh = 6.0; 
-    const eigenVAspectTrheshMax = 50.0;
+    const opacityResetV = 0.9; 
+    const eigenVAspectTrheshMax = 0.2;
     const alphaCutoff = 0.1;
 
     const radixElements = 3; // splat id, chunk id, permutation id
@@ -205,7 +207,16 @@ async function main() {
             adamShad +
             reduceLossCompute 
         )
-    })
+    });
+
+    const opacityResetModule = ctx.device.createShaderModule({
+        label: 'opacity reset',
+        code: (
+            sharedConstants +
+            shaderGradTypes + 
+            opacityReset 
+        )
+    });
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
@@ -216,9 +227,6 @@ async function main() {
             gaussTileVertStorage
         ),
     });
-
-
-
 
     const fsModule = ctx.device.createShaderModule({
         label: 'simple texture frag impl',
@@ -258,10 +266,6 @@ async function main() {
                         .add('alpha', "f32");
     const gradStorageDesc = gradientStorageBuilder.build();
 
-    // reduce uniform buffer
-    const reduceBuilder = new UniformBufferDescriptorBuilder('reduce uniform', "uniform");
-    const reduceUniDesc = reduceBuilder.add('stride', "u32").build();
-
     const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', CONSTANTS.nSteps * numChunks);
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
@@ -287,7 +291,7 @@ async function main() {
             .add('alphaCutOff', "f32")
             .add('gradientPosVari', "f32")
             .add('gradinetScalVari', "f32")
-            .add('eigenVAspectThresh', "f32")
+            .add('opacityReset', "f32")
             .add('eigenVAspectTrheshMax', "f32")
             .add('weightedLoss', "f32");
 
@@ -691,6 +695,14 @@ async function main() {
         },
     });
 
+    const pipelineOpacityReset = ctx.device.createComputePipeline({
+        label: 'opacity fix pipeline',
+        layout: pipelineLayoutCompute,
+        compute: {
+            module: opacityResetModule,
+        },
+    });
+
     const renderPassDescriptorScreen : GPURenderPassDescriptor= {
         label: 'basic renderpass',
         colorAttachments: [
@@ -911,7 +923,7 @@ async function main() {
         alphaCutoff, // alpha cutoff
         gradientPosThresh, // positional gradient cutoff 
         gradientScaleThresh, // scale gradient cutoff
-        eigenVAspectThresh, // how diagnoal my splat can be
+        opacityResetV, // how diagnoal my splat can be
         eigenVAspectTrheshMax, // how thinn i allow them to be!
         0.0, // loss wieght L2 <-> L1
     ], 0);
@@ -1020,6 +1032,7 @@ async function main() {
         lossWeight : 0.0,
         nSteps : maxSteps,
         refineSteps : refineAfter,
+        opacitySteps: opacityResetAfter,
     }
 
 
@@ -1063,6 +1076,7 @@ async function main() {
     render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
 
     let refineStep = 0;
+    let opacityStep = 0;
     let runGD = async () => {
         const start = performance.now();
         console.log("start");
@@ -1128,8 +1142,22 @@ async function main() {
 
             passRender.end();
 
-            ctx.renderPassDescriptor = renderPassDescriptorScreen;
-            render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+            // ctx.renderPassDescriptor = renderPassDescriptorScreen;
+            // render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+            opacityStep++;
+            if(opacityStep >= PARAMS_GUI.opacitySteps) {
+                console.log("opacity Reset");
+                const passOpacity = encoder.beginComputePass({
+                    label: 'refine step compute pass',
+                });
+                passOpacity.setPipeline(pipelineOpacityReset);
+                passOpacity.setBindGroup(0, bindGroupBackwards);
+                passOpacity.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+                passOpacity.end();
+                opacityStep = 0;
+
+            }
+
             refineStep++;
             if(refineStep >= PARAMS_GUI.refineSteps) {
                 console.log("refine")
@@ -1211,6 +1239,12 @@ async function main() {
             label: 'refine after:',
             min: 1,
             max: 1000,
+        });
+
+        pane.addBinding(PARAMS_GUI, 'opacitySteps', {
+            label: 'opacity after:',
+            min: 1,
+            max: 100,
         });
 
 
