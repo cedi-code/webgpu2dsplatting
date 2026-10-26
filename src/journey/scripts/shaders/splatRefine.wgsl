@@ -23,52 +23,6 @@ fn copySplat(splat : Params) -> Params {
     return Params(splat.pos, splat.scale, splat.rot, splat.color, splat.alpha);
 }
 
-fn eigenValues(varMat : mat2x2f) -> vec2f {
-    // varMat is symetric
-    // first eigen value is det(A - \lambda * I) = 0
-    // A = ( a, c // c, b )
-    // det(A - lambda * I) = (a - \lambda) * (b - lambda) - c^2 = 0
-    // (ab - (a + b)\lambda - lambda^2 - c^2 = 0
-    // lambda^2 - (a + b)\lambda + (ab - c^2) = 0
-    // mitternachts formel:
-    // lambda_1,2 = 0.5 * ((a+b) +- sqrt((a+b)^2 - 4*(ab - c^2)))
-    // we want the bigger eigen value and sqrt > 0 so we take +?
-    // lambda_1 = 0.5 * (a+b + sqrt((a-b)^2 + 4c^2))
-    
-    let a = varMat[0].x;
-    let b = varMat[1].y;
-    let c = varMat[0].y;
-
-    let D = max(0.0, (a-b)*(a-b) + 4.0 * c * c);
-    let Dsqrt = sqrt(D);
-    let lambda1 = 0.5 * ((a + b) + Dsqrt);
-    let lambda2 = 0.5 * ((a + b) - Dsqrt);
-
-    return vec2f(lambda1, lambda2);
-}
-
-fn firstEigenVec(varMat : mat2x2f, lambda1 : f32, lambda2 : f32) -> vec2f {
-
-    // v1 = [ (\lambda_1 - b), c ]
-
-    let a = varMat[0].x;
-    let b = varMat[1].y;
-    let c = varMat[0].y;
-
-    let v1 = vec2f(lambda1 - b , c);
-    let v2 = vec2f(c , lambda1 - a);
-
-    let v1Len2 = dot(v1, v1);
-
-    let v3 = select(v1, v2, v1Len2 < 1.0e-10);
-    
-    let v3Len2 = dot(v3, v3);
-
-    let scale = sqrt(max(0.0, lambda1));
-
-    return normalize(select(v3, vec2f(1,0), v3Len2 < 1e-10)) * scale;
-}
-
 @compute @workgroup_size(GROUPSIZE, 1, 1)
 fn cs(
     @builtin(global_invocation_id) global_invocation_id : vec3u,
@@ -114,10 +68,10 @@ fn cs(
 
     let lowAlpha = splatP.alpha < maxAlpha;
 
-    let aspectMaxCheck = eigenVals.x > uniforms.eigenVAspectThreshMax;
+    // let aspectMaxCheck = eigenVals.x > uniforms.eigenVAspectThreshMax;
 
 
-    let removeFlag = offScreen || lowAlpha || aspectMaxCheck;
+    let removeFlag = offScreen || lowAlpha;
 
     // == Gradient check ==
 

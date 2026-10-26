@@ -97,7 +97,6 @@ fn loadGrad(i : u32) -> Grad {
     return g;
 }
 
-
 @compute @workgroup_size(chunkWidth, chunkHeight, 1) 
 fn computeGD(
     @builtin(global_invocation_id) global_invocation_id : vec3u,
