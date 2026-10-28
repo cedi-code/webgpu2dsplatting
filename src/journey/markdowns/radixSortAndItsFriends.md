@@ -158,3 +158,33 @@ one approach could be using a global gradient memory buffer where each thread ad
 another idea is to perform another radix sort on top of the gradients, this time sorting by splats, and then summing up in parallel all the chunks
 
 well actually we already have this order from the Radix setup! there the order is already in (splat, chunk), so we just need to store all the gradients in that order and then they can easly be summed up in parallel! no need to resort them or do atomic operations! 
+
+## Refine
+
+### Remove
+
+
+### Densification
+
+[explain the eigenvector approach for split gaussian]
+[also clone gaussian is kept at same pos]
+
+### Alpha degradation (floaters)
+
+One funny thing that i noticed was that very small splats that where created from the Densification where so small that they bearly contributed to the loss, so they would just stay.
+
+![aaa](../../../assets/floaters.png)
+
+The paper actually discusses this issue and calls them floaters, which they remove after 3000-steps, setting the alpha value very low and hoping for GD to increase the alpha for relevant features again.
+
+While my solution is to just every 30-50 steps have a pass that  decreasing the alpha value, so floaters slowley fade away in the background. 
+
+```wgsl
+...
+fn cs() {
+    let splat_id = global_invocation_id.x;
+    splats[splat_id].alpha *= uniforms.opacityReset;
+}
+``` 
+
+

@@ -46,7 +46,7 @@ async function main() {
     
     const vsModule = ctx.device.createShaderModule({
         label: '2d static tile',
-        code: shaderGradTypes + shaderGaussFunctions + gaussTileVertStorage,
+        code: `const TILE_SCALE = 4.0; const NUM_SPLATS= 1000.0;` + shaderGradTypes + shaderGaussFunctions + gaussTileVertStorage,
     });
 
     const fsModule = ctx.device.createShaderModule({
