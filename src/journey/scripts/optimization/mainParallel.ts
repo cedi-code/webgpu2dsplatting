@@ -71,6 +71,8 @@ async function main() {
     const maxSteps = 100;
     const refineAfter = 300;
     const opacityResetAfter = 30;
+    // copilot added
+    const FPS = 30;
 
     const gradientPosThresh = 0.002;
     const gradientScaleThresh = 0.02;
@@ -1049,6 +1051,7 @@ async function main() {
         blobs : false,
         lossWeight : 0.0,
         nSteps : maxSteps,
+        speed : 0, // copilot added
         refineSteps : refineAfter,
         doRefine : true,
         opacitySteps: opacityResetAfter,
@@ -1071,14 +1074,18 @@ async function main() {
         buff.unmap();
     }
 
+    let lossStepsReported = 0;     // copilot added
+
     let updateLossResults = async () => {
 
         // read loss output
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
-        lossData.push(...result.subarray(0, PARAMS_GUI.nSteps));
+        const newLosses = result.subarray(lossStepsReported, completedSteps);
+        lossData.push(...newLosses);
         const lastStep = lossSteps.at(-1) ?? 0;
-        lossSteps.push(...[...Array(PARAMS_GUI.nSteps).keys()].map((v) => v + lastStep));
+        lossSteps.push(...[...Array(newLosses.length).keys()].map((v) => v + lastStep));
+        lossStepsReported = completedSteps;
         
         lossPlot.setData([lossSteps, lossData]);
 
@@ -1097,17 +1104,28 @@ async function main() {
 
     let refineStep = 0;
     let opacityStep = 0;
+    let completedSteps = 0;         // copilot added
+    let runInProgress = false;      // copilot added
+    let cancelGD = () => {};        // copilot added
+    let updateGDButton = (running: boolean) => {};   // copilot added
     let runGD = async () => {
+        if (runInProgress) {
+            return;
+        }
+
+        if (completedSteps >= PARAMS_GUI.nSteps) {
+            completedSteps = 0;
+            lossStepsReported = 0;
+            refineStep = 0;
+            opacityStep = 0;
+        }
+
+        runInProgress = true;
+        updateGDButton(true);
         const start = performance.now();
         console.log("start");
 
-        const encoder = ctx.device.createCommandEncoder({
-            label: 'gd encoder',
-        });
-        encoder.clearBuffer(lossBuffer, 0, lossBuffDesc.sizeBytes);
-
-        for(let i = 0; i < PARAMS_GUI.nSteps; i++) {
-
+        const encodeStep = (encoder: GPUCommandEncoder) => {
             // reset the gradients, maybe do this in the shader and not here?
             encoder.clearBuffer(gradientBuffer, 0, gradDesc.sizeBytes);
 
@@ -1151,15 +1169,12 @@ async function main() {
             // adam
             pass.setPipeline(pipelineAdamCompute);
             pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
-
             pass.end();
-            
-            // forward pass
+
             const passRender = encoder.beginRenderPass(renderPassDescriptorTexture);
             passRender.setPipeline(pipeLineForward);
             passRender.setBindGroup(0, bindGroupForward);
             passRender.drawIndirect(drawBuffer, 0);
-
             passRender.end();
 
             // ctx.renderPassDescriptor = renderPassDescriptorScreen;
@@ -1175,7 +1190,6 @@ async function main() {
                 passOpacity.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
                 passOpacity.end();
                 opacityStep = 0;
-
             }
 
             refineStep++;
@@ -1192,36 +1206,114 @@ async function main() {
                 // again the same thing
                 passRefine.setPipeline(pipelineSplatCheck2);
                 passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
-
                 passRefine.end();
                 refineStep = 0;
             }
+        };
+
+        let lossBufferCleared = completedSteps > 0;
+        // ===
+        // copilot added "submitSteps"
+        // ===
+        const submitSteps = (stepCount: number) => {
+            const encoder = ctx.device.createCommandEncoder({
+                label: 'gd encoder',
+            });
+            if (!lossBufferCleared) {
+                encoder.clearBuffer(lossBuffer, 0, lossBuffDesc.sizeBytes);
+                lossBufferCleared = true;
+            }
+            for(let i = 0; i < stepCount; i++) {
+                encodeStep(encoder);
+            }
+            ctx.device.queue.submit([encoder.finish()]);
+        };
+
+        let readbackInProgress = false;
+        // ===
+        // copilot added "finishRun"
+        // ===
+        const finishRun = async (isFinalRun: boolean) => {
+            if (readbackInProgress) {
+                return;
+            }
+            readbackInProgress = true;
+            const readbackEncoder = ctx.device.createCommandEncoder({
+                label: 'gd readback encoder',
+            });
+            readbackEncoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
+            readbackEncoder.copyBufferToBuffer(radixBuff, 0, radixBuffRead, 0, radixBuffRead.size);
+            readbackEncoder.copyBufferToBuffer(drawBuffer, 0, activeSplatsBuffRead, 0, activeSplatsBuffRead.size);
+            ctx.device.queue.submit([readbackEncoder.finish()]);
+            await ctx.device.queue.onSubmittedWorkDone();
+            await updateLossResults();
+            await readAndPrintBuff(activeSplatsBuffRead, Uint32Array);
+            console.log("elapsed time:", (performance.now() - start) / 1000.0);
+            readbackInProgress = false;
+            if (isFinalRun) {
+                runInProgress = false;
+                updateGDButton(false);
+            }
+        };
+
+        if (PARAMS_GUI.speed === 0) {
+            submitSteps(PARAMS_GUI.nSteps - completedSteps);
+            completedSteps = PARAMS_GUI.nSteps;
+            await finishRun(true);
+            ctx.renderPassDescriptor = renderPassDescriptorScreen;
+            render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+            return;
         }
-        
-        // copy buffer to cpu (expensive!)
-        encoder.copyBufferToBuffer(lossBuffer, 0, lossResultBuffer, 0, lossResultBuffer.size);
-        encoder.copyBufferToBuffer(radixBuff, 0, radixBuffRead, 0, radixBuffRead.size);
-        encoder.copyBufferToBuffer(drawBuffer, 0, activeSplatsBuffRead, 0, activeSplatsBuffRead.size);
-        // run the work lmao
-        const commandBuffer = encoder.finish();
-        ctx.device.queue.submit([commandBuffer]);
-        
-        // display on canvas
-        ctx.renderPassDescriptor = renderPassDescriptorScreen;
-        
-        render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
 
-        await ctx.device.queue.onSubmittedWorkDone();
+        let lastFrameTime = performance.now();
+        let lastFinishTime = lastFrameTime;
+        let stepAccumulator = 0;
+        let animationFrameId: number | undefined;
+        // ===
+        // copilot added "scheduleFrame"
+        // ===
+        const scheduleFrame = (frameTime: number) => {
+            if (completedSteps >= PARAMS_GUI.nSteps) {
+                runInProgress = false;
+                updateGDButton(false);
+                return;
+            }
 
-        let elapsed = performance.now() - start;
-        console.log("elapsed time:", elapsed / 1000.0);
+            const elapsedSeconds = Math.max(0, frameTime - lastFrameTime) / 1000;
+            lastFrameTime = frameTime;
+            const stepsThisFrame = PARAMS_GUI.speed === 1
+                ? 1
+                : (() => {
+                    stepAccumulator += elapsedSeconds * Math.pow(FPS, 2 - PARAMS_GUI.speed);
+                    const steps = Math.floor(stepAccumulator);
+                    stepAccumulator -= steps;
+                    return steps;
+                })();
 
-        // get loss
-        await updateLossResults();   
-        
-        // debug
-        readAndPrintBuff(activeSplatsBuffRead, Uint32Array);
-        
+            const remainingSteps = PARAMS_GUI.nSteps - completedSteps;
+            const stepCount = Math.min(remainingSteps, stepsThisFrame);
+            if (stepCount > 0) {
+                submitSteps(stepCount);
+                completedSteps += stepCount;
+                ctx.renderPassDescriptor = renderPassDescriptorScreen;
+                render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+                if (completedSteps < PARAMS_GUI.nSteps && frameTime - lastFinishTime >= 1000) {
+                    lastFinishTime = frameTime;
+                    void finishRun(false);
+                }
+            }
+            animationFrameId = requestAnimationFrame(scheduleFrame);
+        };
+
+        cancelGD = () => {
+            if (animationFrameId !== undefined) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = undefined;
+            }
+            runInProgress = false;
+            updateGDButton(false);
+        };
+        animationFrameId = requestAnimationFrame(scheduleFrame);
     }
     // == interactive suff, not really needed
     {
@@ -1253,6 +1345,13 @@ async function main() {
             min: 1,
             max: CONSTANTS.nSteps,
             step: 10,
+        });
+
+        pane.addBinding(PARAMS_GUI, 'speed', {
+            label: 'gd speed',
+            min: 0,
+            max: 2,
+            step: 0.1,
         });
 
         const refinePane = pane.addFolder({
@@ -1327,11 +1426,21 @@ async function main() {
             updateUniform('scaleDivideConst', ev.value);
         });
 
-        pane.addButton({
+        // copilot added
+        const gdButton = pane.addButton({
             title: 'gradient descent',
             label: 'step'
-        }).on('click', async () => {
-            await runGD();
+        });
+        updateGDButton = (running: boolean) => {
+            gdButton.title = running ? 'stop gradient descent' : 'gradient descent';
+            gdButton.label = running ? 'stop' : 'step';
+        };
+        gdButton.on('click', async () => {
+            if (runInProgress) {
+                cancelGD();
+            } else {
+                await runGD();
+            }
         });
     }
 
