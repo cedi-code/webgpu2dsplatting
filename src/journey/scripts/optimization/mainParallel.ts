@@ -11,6 +11,7 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
 import { generateAtomicOperations } from '../../../myutils/ShaderTemplating';
+import { splatConfig } from '../../../config';
 
 import shaderCodeCompute from '../shaders/gradientBackwardsCompute.wgsl?raw';
 import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
@@ -51,70 +52,51 @@ const canvasDim = {
     height : canvasElem.height,
 };
 
+const ctx = await getWebGPUctx({ canvasId: canvasId});
+
+
 async function main() {
 
-    const ctx = await getWebGPUctx({ canvasId: canvasId});
     if(!ctx) {
         return;
     }
 
-    // number of splats
-    const numSplats = 2000; // hard limit is 1 splat per pixel?
-    const activeSplats = 1000;
-    const sampleDim = 128;
-    const chunkWidth = 16;
-    const chunkHeight = 16;
-    const chunksX = Math.floor(((sampleDim + chunkWidth - 1)  / chunkWidth));
-    const chunksY = Math.floor(((sampleDim + chunkHeight - 1)  / chunkHeight));
-    const numChunks = chunksX * chunksY;
-
-    const maxSteps = 100;
-    const refineAfter = 300;
-    const opacityResetAfter = 30;
-    // copilot added
     const FPS = 30;
 
-    const gradientPosThresh = 0.002;
-    const gradientScaleThresh = 0.02;
-    const opacityResetV = 0.99; 
-    const alphaCutoff = 0.1;
-    const scaleDivideConst = 1.6;
-
-    const radixElements = 3; // splat id, chunk id, permutation id
-    const groupSizeRadix = 256;
-    const barriersPrefixSum = 8; // log2(groupSizeRadix)
-    const radixSetupDispatches = Math.floor((numSplats + groupSizeRadix - 1) / groupSizeRadix);
-    const maxSplatsPerChunk = Math.min(numSplats, 256);
-
-    // logb(a) = logc(a) / locc(b)
-    const numRadixSorts = 1 + Math.floor(Math.log(numChunks) / Math.log(groupSizeRadix));
-    const groupChunkRatio = 1 + Math.floor(numChunks / groupSizeRadix)
+    const radixIndex = (name: string): number => {
+        const element = splatConfig.radixElements.find((radixElement) => radixElement.name === name);
+        if (!element) {
+            throw new Error(`Missing radix element "${name}" in splatConfig`);
+        }
+        return element.index;
+    };
 
     // constants
     const CONSTANTS = {
-        NUM_SPLATS : numSplats,
-        xRAY : false,
-        sampleDim : sampleDim,
+        NUM_SPLATS : splatConfig.setup.numSplats,
+        xRAY : splatConfig.fragment.xRAY,
+        sampleDim : splatConfig.setup.sampleDim,
         EPSILON : MACHINE_EPSILON,
-        chunkWidth: chunkWidth,
-        chunkHeight: chunkHeight,
-        numChunksW : chunksX,
-        numChunksH : chunksY,
-        nSteps : maxSteps,
-        TILE_SCALE: 4,
-        MAX_SPLATS_CHUNK : maxSplatsPerChunk,
-        // 2 because it says which splat id first and then the "chunk/box id", depth is the splat id
-        MAX_SLOTS: numChunks * radixElements * maxSplatsPerChunk,
-        RADIX_ELEMS: radixElements, 
-        R_CHUNK_INDEX: 0,
-        R_SPLAT_INDEX: 1,
-        R_TRANSPOSE_INDEX: 2,
-        GROUPSIZE: groupSizeRadix,
-        BARRIERS: barriersPrefixSum,
-        NUM_DISPATCHES : radixSetupDispatches,
-        NUM_SORTS : numRadixSorts,
-        OFF_CANVAS_TRHESHOLD : 1.2, // distance of canvas border 1.0 means canvas border
-        OPACITY_PERCENTAGE : 0.6,
+        chunkWidth: splatConfig.setup.chunkWidth,
+        chunkHeight: splatConfig.setup.chunkHeight,
+        numChunksW : splatConfig.chunksX,
+        numChunksH : splatConfig.chunksY,
+        nSteps : splatConfig.loss.maxSteps,
+        TILE_SCALE: splatConfig.fragment.tileScale,
+        MAX_SPLATS_CHUNK : splatConfig.maxSplatsPerChunk,
+        MAX_SLOTS: splatConfig.maxSlots,
+        RADIX_ELEMS: splatConfig.radixElementsCount,
+        R_CHUNK_INDEX: radixIndex('chunk'),
+        R_SPLAT_INDEX: radixIndex('splat'),
+        R_TRANSPOSE_INDEX: radixIndex('transpose'),
+        GROUPSIZE: splatConfig.radix.groupSizeRadix,
+        BARRIERS: splatConfig.numBarriers,
+        NUM_DISPATCHES : splatConfig.radixSetupDispatches,
+        NUM_SORTS : splatConfig.numRadixSorts,
+        GROUP_CHUNK_RATIO: splatConfig.groupChunkRatio,
+        OFF_CANVAS_TRHESHOLD : splatConfig.refine.offCanvasThreshold,
+        OPACITY_PERCENTAGE : splatConfig.fragment.opacityPercentage,
+        NUM_CHUNKS: splatConfig.numChunks
     };
 
     console.table(CONSTANTS);
@@ -235,7 +217,7 @@ async function main() {
     });
 
 
-    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numSplats);
+    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.NUM_SPLATS);
     paramBuilder.add('pos', "vec2f")
                 .add('scale', "vec2f")
                 .add('rot', "f32")
@@ -243,7 +225,7 @@ async function main() {
                 .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
 
-    const accumulatedGradStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', numSplats);
+    const accumulatedGradStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.NUM_SPLATS);
     accumulatedGradStorageBuilder.add('pos', "vec2f")
                 .add('scale', "vec2f")
                 .add('rot', "f32")
@@ -267,10 +249,10 @@ async function main() {
                         .add('alpha', "f32");
     const gradStorageDesc = gradientStorageBuilder.build();
 
-    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', CONSTANTS.nSteps * numChunks);
+    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', CONSTANTS.nSteps * CONSTANTS.NUM_CHUNKS);
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
-    console.log("loss array size:", CONSTANTS.nSteps * numChunks);
+    console.log("loss array size:", CONSTANTS.nSteps * CONSTANTS.NUM_CHUNKS);
 
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
@@ -312,9 +294,9 @@ async function main() {
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
     radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
-              .add("offsets", { type : "u32", size: numChunks })
-              .add("data", { type : "u32", size: CONSTANTS.MAX_SLOTS })
-              .add("data2", { type : "u32", size: CONSTANTS.MAX_SLOTS })
+              .add("offsets", { type : "u32", size: CONSTANTS.NUM_CHUNKS })
+              .add("data", { type : "u32", size : CONSTANTS.MAX_SLOTS })
+              .add("data2", { type : "u32", size : CONSTANTS.MAX_SLOTS })
               .add("splatOffsetsTotal", { type : "u32", size : CONSTANTS.NUM_SPLATS });
 
     const radixDesc = radixBuild.build();
@@ -766,7 +748,7 @@ async function main() {
 
     const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
 
-    const testImageUrl = 'assets/jeff.jpg';
+    const testImageUrl = 'assets/cat.jpg';
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
@@ -861,7 +843,7 @@ async function main() {
         }
     }
 
-    imageGridSplats(activeSplats, source.width, source.height);
+    imageGridSplats(splatConfig.dynamic.activeSplats, source.width*2, source.height*2);
 
     // randomSplatInit(activeSplats);
 
@@ -881,7 +863,7 @@ async function main() {
 
     const prtyPrint = (data : Float32Array) => {
         const result : FlatParams[] = []
-        for(let i = 0; i < Math.min(activeSplats, 30); i++) {
+        for(let i = 0; i < Math.min(splatConfig.dynamic.activeSplats, 30); i++) {
             const splatData = data.subarray(unitS*i, unitS*(i+1));
             result.push(parseParams(splatData, paramDesc));
         }
@@ -925,11 +907,11 @@ async function main() {
         0.9,
         0.999,
         MACHINE_EPSILON,
-        alphaCutoff, // alpha cutoff
-        gradientPosThresh, // positional gradient cutoff 
-        gradientScaleThresh, // scale gradient cutoff
-        opacityResetV, // how diagnoal my splat can be
-        scaleDivideConst,
+        splatConfig.refine.alphaCutoff, // alpha cutoff
+        splatConfig.refine.gradientPosThresh, // positional gradient cutoff
+        splatConfig.refine.gradientScaleThresh, // scale gradient cutoff
+        splatConfig.refine.opacityResetV, // how diagnoal my splat can be
+        splatConfig.refine.scaleDivideConst,
         0.0, // loss wieght L2 <-> L1
     ], 0);
     
@@ -957,10 +939,10 @@ async function main() {
     });
     const drawArgs = new Uint32Array(drawArgsDesc.size);
     drawArgs[0] = 6; // vertex count
-    drawArgs[1] = activeSplats; // instance count
+    drawArgs[1] = splatConfig.dynamic.activeSplats; // instance count
     drawArgs[2] = 0; // first vertex (offset)
     drawArgs[3] = 0; // first instance (offset)
-    drawArgs[4] = activeSplats; // workgroupX
+    drawArgs[4] = splatConfig.dynamic.activeSplats; // workgroupX
     drawArgs[5] = 1; // workgroupY
     drawArgs[6] = 1; // workgroupZ
     drawArgs[7] = 0; // hacky padding
@@ -1050,11 +1032,11 @@ async function main() {
     const PARAMS_GUI = {
         blobs : false,
         lossWeight : 0.0,
-        nSteps : maxSteps,
+        nSteps : splatConfig.loss.maxSteps,
         speed : 0, // copilot added
-        refineSteps : refineAfter,
+        refineSteps : splatConfig.dynamic.refineAfter,
         doRefine : true,
-        opacitySteps: opacityResetAfter,
+        opacitySteps: splatConfig.dynamic.opacityResetAfter,
         doOpacitiy : true,
     }
 
@@ -1096,11 +1078,11 @@ async function main() {
 
     // render in texture
     ctx.renderPassDescriptor = renderPassDescriptorTexture;
-    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, true, drawBuffer);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, true, drawBuffer);
 
     // renders on screen
     ctx.renderPassDescriptor = renderPassDescriptorScreen;
-    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+    render(ctx, pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
 
     let refineStep = 0;
     let opacityStep = 0;
@@ -1149,11 +1131,11 @@ async function main() {
 
             // calculate chunk offsets
             pass.setPipeline(pipelineRadixOffset);
-            pass.dispatchWorkgroups(groupChunkRatio);
+            pass.dispatchWorkgroups(splatConfig.groupChunkRatio);
 
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
-            pass.dispatchWorkgroups(chunksX, chunksY);
+            pass.dispatchWorkgroups(CONSTANTS.numChunksW, CONSTANTS.numChunksH);
 
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
@@ -1261,7 +1243,7 @@ async function main() {
             completedSteps = PARAMS_GUI.nSteps;
             await finishRun(true);
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
-            render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+            render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
             return;
         }
 
@@ -1296,7 +1278,7 @@ async function main() {
                 submitSteps(stepCount);
                 completedSteps += stepCount;
                 ctx.renderPassDescriptor = renderPassDescriptorScreen;
-                render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+                render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
                 if (completedSteps < PARAMS_GUI.nSteps && frameTime - lastFinishTime >= 1000) {
                     lastFinishTime = frameTime;
                     void finishRun(false);
@@ -1329,7 +1311,7 @@ async function main() {
         }).on('change', (ev) => {
             let showBlob = ev.value;
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
-            render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, activeSplats, false, drawBuffer);
+            render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
 
         });
 
@@ -1389,39 +1371,39 @@ async function main() {
         })
 
         const refineUniformParams = {
-            alphaCutOff: alphaCutoff,
-            posGradThresh: gradientPosThresh,
-            scaleGradThresh: gradientScaleThresh,
-            opacityReset: opacityResetV,
-            scaleDivideConst,
+            alphaCutOff: splatConfig.refine.alphaCutoff,
+            posGradThresh: splatConfig.refine.gradientPosThresh,
+            scaleGradThresh: splatConfig.refine.gradientScaleThresh,
+            opacityReset: splatConfig.refine.opacityResetV,
+            scaleDivideConst: splatConfig.refine.scaleDivideConst,
         };
 
         refineParams.addBinding(refineUniformParams, 'alphaCutOff', {
-            step: alphaCutoff / 10,
+            step: splatConfig.refine.alphaCutoff / 10,
         }).on('change', (ev) => {
             updateUniform('alphaCutOff', ev.value);
         });
 
         refineParams.addBinding(refineUniformParams, 'posGradThresh', {
-            step: gradientPosThresh / 10,
+            step: splatConfig.refine.gradientPosThresh / 10,
         }).on('change', (ev) => {
             updateUniform('gradientPosVari', ev.value);
         });
 
         refineParams.addBinding(refineUniformParams, 'scaleGradThresh', {
-            step: gradientScaleThresh / 10,
+            step: splatConfig.refine.gradientScaleThresh / 10,
         }).on('change', (ev) => {
             updateUniform('gradinetScalVari', ev.value);
         });
 
         refineParams.addBinding(refineUniformParams, 'opacityReset', {
-            step: opacityResetV / 10,
+            step: splatConfig.refine.opacityResetV / 10,
         }).on('change', (ev) => {
             updateUniform('opacityReset', ev.value);
         });
 
         refineParams.addBinding(refineUniformParams, 'scaleDivideConst', {
-            step: scaleDivideConst / 10,
+            step: splatConfig.refine.scaleDivideConst / 10,
         }).on('change', (ev) => {
             updateUniform('scaleDivideConst', ev.value);
         });

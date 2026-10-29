@@ -1,6 +1,6 @@
 @group(0) @binding(8) var<storage, read_write> radixMem : RadixMemory;
 
-const numChunks = numChunksW * numChunksH;
+
  
 fn readChunkId(index : u32) -> u32 {
     if(NUM_SORTS % 2 == 0) 
@@ -41,7 +41,7 @@ fn radixSort(
 ) {
     let chunk_id = global_invocation_id.x;
 
-    if(chunk_id >= numChunks) {
+    if(chunk_id >= NUM_CHUNKS) {
         return;
     }
     let dataSize = radixMem.splatOffsets[NUM_DISPATCHES-1u] / RADIX_ELEMS;

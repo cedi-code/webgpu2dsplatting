@@ -1,11 +1,11 @@
 import {
-    type ctx,
-    type ctxFull,
+    type ctxRender,
+    type ctxWebGPU,
     type ctxOptions,
 } from "../mytypes/ContextTypes"
 
 function render(
-    ctx : ctx,
+    ctx : ctxRender,
     pipeline : GPURenderPipeline, 
     bindGroup?: GPUBindGroup, 
     vertexBuffer?: GPUBuffer,
@@ -48,7 +48,7 @@ function render(
     ctx.device.queue.submit([commandBuffer]);
 }
 
-async function getWebGPUctx(options? : ctxOptions) : Promise< ctxFull| null> {
+async function getWebGPUctx(options? : ctxOptions) : Promise< ctxWebGPU| null> {
     const gpu = navigator.gpu;
     if(!gpu) {
         alert("browser needs WebGPU support");
