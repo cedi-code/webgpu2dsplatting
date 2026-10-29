@@ -43,7 +43,7 @@ this adds a couple of new render passes that need to be implemented:
 ```
 forwardPass()
 setupBoxArray() // [!code ++]
-radixSort() //  // [!code ++]
+radixSort()  // [!code ++]
 backwardsPass()
 reducePass()
 adamPass()
@@ -53,12 +53,19 @@ the splats are then stored into a array which is sorted by boxes, so the boxes i
 
 ### SetupBox array
 
-We basically want get this:
+The goal of this part is to have data arranged as follows:
 $$
-\{ (i, (k,j)) \quad | \quad g_i(p_{k,j}) > \epsilon \quad  \}
+\{ ((k,j), i) \quad | \quad g_i(p_{k,j}) > \epsilon \quad  \}
 $$
 
-and we want it to be sorted by $(k,j)$
+for example:
+```text
+[(chunk2, splat2), (chunk3, splat2), (chunk1, splat1), (chunk2, splat1)]
+```
+the data comes in pairs of splats $i$ and for simplifaction we just have a single index for chunk $j$
+
+in the example, `splat1` covers 2 chunks `[chunk1, chunk2]` and `splat2` covers also 2 chunks `[chunk2, chunk3]` 
+
 
 we run a workgroup for each splat
 and have the following struct:
@@ -68,49 +75,104 @@ struct radixMemory {
     data : array<u32, MAX_SLOTS>,
     currI : atomic<u32>,
 };
+
 @group(0) @binding(0) var<storage, read_write> splats: array<Params>;
-// NUM_SPLATS % 256 invocations
-@workgroup(256,1,1)
+
+@workgroup(NUM_SPLATS,1,1)
 
 fn registerSplats(
         @builtin(global_invocation_id) global_invocation_id : vec3u,
 ) {
-    let gaussP = splat[i];
+    let i = global_invocation_id.x;
 
-    // get the left, right, top, bottom most points of gaussian
+    let splat = splats[i];
 
-    // grab the current index and increase it by bbox
+    // figure out how many chunks the splat covers
 
-    // write down the key value pairs
+    // grab the current index and increase it by # chunks
+
+    // write down the chunk-j,splat-i pairs.
 
 }
 ```
+
 ### SetupBox better
 
 we can do better...
-our splats are already orderd by depth, so leaving it to a atomic currI we have to resort the depth!
+our splats are already orderd by depth, so leaving it to a atomic currI we have to resort for splats $i$!
 
-instead when we write our key value pairs, we want to already do that in order of the splats
+instead we can write them in order from the beginning
 
+```text
+[(?, splat1), (?, splat1), (?, splat2), (?, splat2), ...]
 ```
-(1, _), (1, _), (2, _), (2, _), ..., (M, _) 
-```
+
+To achive this, we have need to know how many chunks a splat even covers beforehand, so we do these 3 steps:
 
 1. Count: Calculate the number of boxes each splat covers
 
 2. Scan: Run a prefix sum over those counts. This gives each splat the exact  starting offset for the radix array of key-value pairs
 
-3. Write: write down the key value pairs starting from the prefix sum offset.
+3. Write: write down the key value pairs starting from the prefix sum offset (j,i).
 
+written in code:
+
+```wgsl
+struct radixMemory {
+    data : array<u32, MAX_SLOTS>,
+};
+@group(0) @binding(0) var<storage, read_write> splats: array<Params>;
+
+var<workgroup> offsets: array<u32>; // [!code++]
+
+@workgroup(256,1,1)
+fn registerSplats(
+        @builtin(global_invocation_id) global_invocation_id : vec3u,
+) {
+    let i = global_invocation_id.x;
+
+    // 1. get the left, right, top, bottom most points of gaussian and calculate the number of chunks it would cover.
+    offsets[i] = allocationSize(splats[i]);
+
+    workgroupBarrier();
+
+    // 2. calculate where in 'splats' the current splat would start writing its pairs
+    parallelPrefixSum();
+
+    workgroupBarrier();
+
+    var currOff = offsets[i]; // corrected now
+
+    // 3. write down the key value pairs
+    for(var j = minChunk; j < maxChunk; j++) {
+
+        // box id
+        radixMem.data[currOff] = j;
+
+        // splat id
+        radixMem.data[currOff + 1u] = i;
+
+        currOff += 2;
+    }
+
+}
+```
+
+with this, we already have it sorted by splat id $i$!
+
+Now for the next step, since we do backprop per chunk and not per splat, we need to sort it by chunk id $j$.
+
+#### Parallel Prefix sum
+
+wip: i need to explain parallel prefix sum
 
 ### Radix Sort
 
-explain block prefix sum
-
+wip: i need to explain parallel block prefix sum
 
 ### Backwards pass update
 
-since backwards pass is groupped into chunks, the chunks finally dont need to loop over every splat but only over the splats that overlapp them,
+Since backwards pass is groupped into chunks, the chunks finally dont need to loop over every splat but only over the splats that overlapp them,
 which we can easly read now given our sorted array that is orderd by chunks!
 
 ```
@@ -146,9 +208,6 @@ grad chunk A may have the following:
 
 and grad chunk B:
 
-
-grad chunk A may have the following:
-
 ```
 (gradient_splat2, gradient_splat3)
 ```
@@ -159,32 +218,14 @@ another idea is to perform another radix sort on top of the gradients, this time
 
 well actually we already have this order from the Radix setup! there the order is already in (splat, chunk), so we just need to store all the gradients in that order and then they can easly be summed up in parallel! no need to resort them or do atomic operations! 
 
-## Refine
+```text
+[(chunk1, splat1, transpose1), (chunk1, splat2, transpose2), (chunk2, splat2, transpose3), (chunk2, splat3, transpose4), ...]
+```
 
-### Remove
+the transpose stores the index of the (chunk, splat) pair when it used to be sorted by splat id and not chunk id. 
+One can think of the sorting from splats, to sorting to chunks as a transposing of the adjacency matrix! this matrix is very sparse so thats why we store the old index seperatly.
 
 
-### Densification
 
-[explain the eigenvector approach for split gaussian]
-[also clone gaussian is kept at same pos]
-
-### Alpha degradation (floaters)
-
-One funny thing that i noticed was that very small splats that where created from the Densification where so small that they bearly contributed to the loss, so they would just stay.
-
-![aaa](../../../assets/floaters.png)
-
-The paper actually discusses this issue and calls them floaters, which they remove after 3000-steps, setting the alpha value very low and hoping for GD to increase the alpha for relevant features again.
-
-While my solution is to just every 30-50 steps have a pass that  decreasing the alpha value, so floaters slowley fade away in the background. 
-
-```wgsl
-...
-fn cs() {
-    let splat_id = global_invocation_id.x;
-    splats[splat_id].alpha *= uniforms.opacityReset;
-}
-``` 
 
 

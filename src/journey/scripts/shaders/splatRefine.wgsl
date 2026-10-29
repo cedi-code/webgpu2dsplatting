@@ -130,7 +130,6 @@ fn cs(
         let newNumSplats = atomicLoad(&groupOffset)  + sums[local_id];
         drawBuffer[1] = newNumSplats;
         drawBuffer[4] = newNumSplats;
-
     }
 
 
