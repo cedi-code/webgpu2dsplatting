@@ -97,9 +97,8 @@ export function createShaderModuleDescriptors(
     };
 }
 
-export const splatConfig = createSplattingContext();
-
+export const defaultSplatConfig = createSplattingContext(); 
 export const moduleDescriptorsParallel = createShaderModuleDescriptors(
     PARALLEL_MODULES,
-    splatConfig
+    defaultSplatConfig
 );

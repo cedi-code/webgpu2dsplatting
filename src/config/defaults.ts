@@ -1,25 +1,15 @@
 import type { ShaderModuleConfig } from "./shaders";
 import { type GuiVisibility, type SplattingConfigInput } from "./types";
 
-export const DEFAULT_GUI_VISIBILITY: GuiVisibility = {
-    blobs: true,
-    lossWeight: true,
-    nSteps: true,
-    speed: true,
-    refinement: true,
-    refinementParams: true,
-    gradientDescent: true,
-};
-
 export const DEFAULT_CONFIG: SplattingConfigInput = {
     setup: {
         numSplats: 1000,
-        sampleDim: 500,
+        sampleDim: 512,
         chunkWidth: 16,
         chunkHeight: 16,
     },
     dynamic: {
-        activeSplats: 1000,
+        activeSplats: 500,
         refineAfter: 300,
         opacityResetAfter: 30,
     },
@@ -154,3 +144,13 @@ export const PARALLEL_MODULES : ShaderModuleConfig[] = [
         ]
     }
 ];
+
+export const DEFAULT_GUI_VISIBILITY: GuiVisibility = {
+    blobs: true,
+    lossWeight: true,
+    nSteps: true,
+    speed: true,
+    refinement: true,
+    refinementParams: true,
+    gradientDescent: true,
+};

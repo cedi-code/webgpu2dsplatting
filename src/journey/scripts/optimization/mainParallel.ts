@@ -6,45 +6,42 @@ import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBu
 
 import { type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
 
-import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
+import { getWebGPUctx, loadImageBitmap, render } from '../../../myutils/ContextHelpers';
 
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
-import { moduleDescriptorsParallel, splatConfig } from '../../../config';
+import { defaultSplatConfig, moduleDescriptorsParallel } from '../../../config';
 import { DEFAULT_GUI_VISIBILITY } from '../../../config/defaults';
-import type { GuiVisibility } from '../../../config/types';
-
-async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    return await createImageBitmap(blob, { colorSpaceConversion: 'none'});
-}
+import type { GuiVisibility, SplattingContext } from '../../../config/types';
+import type { ctxWebGPU } from '../../../mytypes';
+import type uPlot from 'uplot';
 
 
-let lossData : number[]  = []
-let lossSteps: number[] = []
-let plotHTMLElem = document.getElementById('loss-plot') ?? document.body;
-let lossPlot = createLossPlot(plotHTMLElem);
+export type mainCtx = {
+    webgpu : ctxWebGPU;
+    config : SplattingContext;
+    gui : GuiVisibility;
+    image : ImageBitmap;
+    pane : Pane;
+    plot? : uPlot;
+} 
 
-const MACHINE_EPSILON = 1.19e-07;
 
-const canvasId = "main"
-const canvasElem = (document.getElementById('main') as HTMLCanvasElement);
-const canvasDim = {
-    width : canvasElem.width, 
-    height : canvasElem.height,
-};
+export async function main(settings : mainCtx) {
 
-const ctx = await getWebGPUctx({ canvasId: canvasId});
-
-async function main(guiVisibility: Partial<GuiVisibility>) {
+    const ctx = settings.webgpu;
+    const splatConfig = settings.config;
+    const guiVisibility = settings.gui;
+    const source = settings.image; // image
+    const pane = settings.pane;
+    const lossPlot = settings.plot;
 
     if(!ctx) {
         return;
     }
-
     const FPS = 30;
-
+    let lossData : number[]  = []
+    let lossSteps: number[] = []
     // prints the current constants
     console.table(splatConfig.setup);
     console.table(splatConfig.dynamic);
@@ -578,7 +575,7 @@ async function main(guiVisibility: Partial<GuiVisibility>) {
     const textureForward = ctx.device.createTexture({
         label: 'forwardpass texture',
         format: 'rgba8unorm',
-        size: [canvasDim.width, canvasDim.height],
+        size: [ctx.canvas.width, ctx.canvas.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
@@ -615,10 +612,9 @@ async function main(guiVisibility: Partial<GuiVisibility>) {
 
     const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
 
-    const testImageUrl = 'assets/cat.jpg';
-    const source = await loadImageBitmap(testImageUrl);
+
     const texture = ctx.device.createTexture({
-        label: testImageUrl,
+        label: 'loaded image',
         format: 'rgba8unorm',
         size: [source.width, source.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
@@ -769,6 +765,7 @@ async function main(guiVisibility: Partial<GuiVisibility>) {
     const uniBuff = bufferManager.createBuffer(uniDesc);
     const uniV = new Float32Array(uniDesc.size);
     console.log(uniDesc.sizeBytes);
+    const MACHINE_EPSILON = 1.19e-07; // this should be somewhere else
     uniV.set([
         0.05,
         0.9,
@@ -927,6 +924,8 @@ async function main(guiVisibility: Partial<GuiVisibility>) {
 
     let updateLossResults = async () => {
 
+        if(!lossPlot)
+            return;
         // read loss output
         await lossResultBuffer.mapAsync(GPUMapMode.READ);
         const result = new Float32Array(lossResultBuffer.getMappedRange());
@@ -1167,12 +1166,6 @@ async function main(guiVisibility: Partial<GuiVisibility>) {
     // == interactive suff, not really needed
     {
         
-        const pane = new Pane({
-            container: document.getElementById("gd-sliders") as HTMLElement,
-        });
-
-
-
         const blobsBinding = pane.addBinding(PARAMS_GUI, 'blobs', {
             label: 'show blobs',
         });
@@ -1303,5 +1296,28 @@ async function main(guiVisibility: Partial<GuiVisibility>) {
     });
     
 }
+const ctxWebgpu = await getWebGPUctx({ canvasId: "main"});
 
-main(DEFAULT_GUI_VISIBILITY);
+if(ctxWebgpu) {
+    let plotHTMLElem = document.getElementById('loss-plot') ?? document.body
+    let lossPlot = createLossPlot(plotHTMLElem);
+
+    const testImageUrl = 'assets/cat.jpg';
+    const source = await loadImageBitmap(testImageUrl);
+
+    const pane = new Pane({
+            container: document.getElementById("gd-sliders") as HTMLElement,
+    });
+
+    main({ 
+        webgpu: ctxWebgpu,
+        config : defaultSplatConfig,
+        gui : DEFAULT_GUI_VISIBILITY,
+        image : source,
+        pane: pane,
+        plot : lossPlot 
+    });
+}
+
+
+
