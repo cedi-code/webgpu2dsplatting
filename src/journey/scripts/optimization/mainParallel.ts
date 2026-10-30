@@ -11,25 +11,10 @@ import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
 import { generateAtomicOperations } from '../../../myutils/ShaderTemplating';
-import { splatConfig } from '../../../config';
-
-import shaderCodeCompute from '../shaders/gradientBackwardsCompute.wgsl?raw';
-import shaderGaussFunctions from '../../../shaders/gaussFunctions.wgsl?raw';
-import gaussTileVertStorage from '../shaders/gaussTileVertStorage.wgsl?raw';
-import gaussFrag from '../shaders/gaussFragBlob.wgsl?raw';
-import adamShad from '../../../shaders/adam.wgsl?raw';
-import adamCompute from '../shaders/adamOnGradients.wgsl?raw';
-import shaderGradTypes from '../../../shaders/gradTypes.wgsl?raw';
-import radixSetup from '../shaders/radixSetup.wgsl?raw';
-import radixCompute from '../shaders/radixSort.wgsl?raw';
-import radixTypes from '../../../shaders/radixTypes.wgsl?raw'
-import reduceRadixCompute from '../shaders/reduceGradientsRadix.wgsl?raw';
-import reduceLossCompute from '../shaders/reduceLoss.wgsl?raw';
-import radixOffsets from '../shaders/radixChunkOffsets.wgsl?raw';
-import opacityReset from '../shaders/opacityReset.wgsl?raw';
-
-import splatRefine from '../shaders/splatRefine.wgsl?raw';
-
+import { moduleDescriptorsParallel, splatConfig } from '../../../config';
+import { PARALLEL_MODULES } from '../../../config/defaults';
+import { CONSTANTS_F } from '../../../config/shaders';
+import type { SplattingContext } from '../../../config/types';
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -71,153 +56,10 @@ async function main() {
         return element.index;
     };
 
-    // constants
-    const CONSTANTS = {
-        NUM_SPLATS : splatConfig.setup.numSplats,
-        xRAY : splatConfig.fragment.xRAY,
-        sampleDim : splatConfig.setup.sampleDim,
-        EPSILON : MACHINE_EPSILON,
-        chunkWidth: splatConfig.setup.chunkWidth,
-        chunkHeight: splatConfig.setup.chunkHeight,
-        numChunksW : splatConfig.chunksX,
-        numChunksH : splatConfig.chunksY,
-        nSteps : splatConfig.loss.maxSteps,
-        TILE_SCALE: splatConfig.fragment.tileScale,
-        MAX_SPLATS_CHUNK : splatConfig.maxSplatsPerChunk,
-        MAX_SLOTS: splatConfig.maxSlots,
-        RADIX_ELEMS: splatConfig.radixElementsCount,
-        R_CHUNK_INDEX: radixIndex('chunk'),
-        R_SPLAT_INDEX: radixIndex('splat'),
-        R_TRANSPOSE_INDEX: radixIndex('transpose'),
-        GROUPSIZE: splatConfig.radix.groupSizeRadix,
-        BARRIERS: splatConfig.numBarriers,
-        NUM_DISPATCHES : splatConfig.radixSetupDispatches,
-        NUM_SORTS : splatConfig.numRadixSorts,
-        GROUP_CHUNK_RATIO: splatConfig.groupChunkRatio,
-        OFF_CANVAS_TRHESHOLD : splatConfig.refine.offCanvasThreshold,
-        OPACITY_PERCENTAGE : splatConfig.fragment.opacityPercentage,
-        NUM_CHUNKS: splatConfig.numChunks
-    };
+    // prints the current constants
+    console.table(splatConfig);
 
-    console.table(CONSTANTS);
-
-    const sharedConstants = Object.entries(CONSTANTS)
-    .map(([k, v]) => `const ${k} = ${v};`)
-    .join('\n');
-
-    const csBackwardsModule = ctx.device.createShaderModule({
-        label: 'backwards pass',
-        code: (
-            sharedConstants +
-            shaderGradTypes +
-            radixTypes +
-            generateAtomicOperations() + 
-            shaderGaussFunctions + 
-            adamShad +
-            shaderCodeCompute
-        )
-    });
-
-    const adamModule = ctx.device.createShaderModule({
-        label: 'adam pass',
-        code: (
-            sharedConstants + 
-            shaderGradTypes + 
-            radixTypes +
-            generateAtomicOperations() + 
-            adamShad  + 
-            adamCompute
-        ) 
-    });
-
-    const radixSetupModule = ctx.device.createShaderModule({
-        label: 'radix setup pass',
-        code: (
-            sharedConstants + 
-            shaderGradTypes + 
-            radixTypes +
-            shaderGaussFunctions +
-            radixSetup
-        ) 
-    });
-
-    const splatCheckModule = ctx.device.createShaderModule({
-        label: 'radix setup pass',
-        code: (
-            sharedConstants +
-            shaderGradTypes +
-            radixTypes +
-            shaderGaussFunctions +
-            adamShad + 
-            splatRefine
-        )
-    });
-
-    const radixModule = ctx.device.createShaderModule({
-        label: 'radix pass',
-        code: (
-            radixTypes +
-            sharedConstants +
-            radixCompute
-        )
-    });
-
-    const radixOffsetModule = ctx.device.createShaderModule({
-        label: 'radix pass',
-        code: (
-            radixTypes +
-            sharedConstants +
-            radixOffsets
-        )
-    });
-
-    const reduceRadixModule = ctx.device.createShaderModule({
-        label: 'reduce pass',
-        code: (
-            sharedConstants + 
-            shaderGradTypes + 
-            radixTypes +
-            adamShad +
-            reduceRadixCompute
-        ) 
-    });
-
-    const reduceLossModule = ctx.device.createShaderModule({
-        label: 'loss reduce',
-        code: (
-            sharedConstants +
-            shaderGradTypes + 
-            adamShad +
-            reduceLossCompute 
-        )
-    });
-
-    const opacityResetModule = ctx.device.createShaderModule({
-        label: 'opacity reset',
-        code: (
-            sharedConstants +
-            shaderGradTypes + 
-            opacityReset 
-        )
-    });
-    
-    const vsModule = ctx.device.createShaderModule({
-        label: '2d static tile',
-        code: (
-            sharedConstants +
-            shaderGradTypes +
-            shaderGaussFunctions + 
-            gaussTileVertStorage
-        ),
-    });
-
-    const fsModule = ctx.device.createShaderModule({
-        label: 'simple texture frag impl',
-        code: (sharedConstants + gaussFrag) 
-    });
-
-
-    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.NUM_SPLATS);
+    const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', splatConfig.setup.numSplats);
     paramBuilder.add('pos', "vec2f")
                 .add('scale', "vec2f")
                 .add('rot', "f32")
@@ -225,7 +67,7 @@ async function main() {
                 .add('alpha', "f32");
     const paramDesc = paramBuilder.build();
 
-    const accumulatedGradStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.NUM_SPLATS);
+    const accumulatedGradStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', splatConfig.setup.numSplats);
     accumulatedGradStorageBuilder.add('pos', "vec2f")
                 .add('scale', "vec2f")
                 .add('rot', "f32")
@@ -241,7 +83,7 @@ async function main() {
     };
 
     // i still cant do arrays of structs...
-    const gradientStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', CONSTANTS.MAX_SLOTS );
+    const gradientStorageBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', splatConfig.maxSlots );
     gradientStorageBuilder.add('pos', "vec2f")
                         .add('scale', "vec2f")
                         .add('rot', "f32")
@@ -249,10 +91,10 @@ async function main() {
                         .add('alpha', "f32");
     const gradStorageDesc = gradientStorageBuilder.build();
 
-    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', CONSTANTS.nSteps * CONSTANTS.NUM_CHUNKS);
+    const lossBuilder = new UniformBufferDescriptorBuilder('loss storage buffer', 'storage', 'copy_src_dst', splatConfig.loss.maxSteps * splatConfig.numChunks);
     lossBuilder.add('loss', "f32");
     const lossBuffDesc = lossBuilder.build();
-    console.log("loss array size:", CONSTANTS.nSteps * CONSTANTS.NUM_CHUNKS);
+    console.log("loss array size:", splatConfig.loss.maxSteps * splatConfig.numChunks);
 
     const adamMemoryBuilder = new UniformBufferDescriptorBuilder('adam memory', 'storage', 'copy_dst');
 
@@ -293,11 +135,11 @@ async function main() {
     const drawArgsDesc = drawArgsBuilder.build();
 
     const radixBuild = new UniformBufferDescriptorBuilder('radix memory', "storage", "copy_src_dst");
-    radixBuild.add("splatOffsets", { type : "u32", size : CONSTANTS.NUM_DISPATCHES })
-              .add("offsets", { type : "u32", size: CONSTANTS.NUM_CHUNKS })
-              .add("data", { type : "u32", size : CONSTANTS.MAX_SLOTS })
-              .add("data2", { type : "u32", size : CONSTANTS.MAX_SLOTS })
-              .add("splatOffsetsTotal", { type : "u32", size : CONSTANTS.NUM_SPLATS });
+    radixBuild.add("splatOffsets", { type : "u32", size : splatConfig.radixSetupDispatches })
+              .add("offsets", { type : "u32", size: splatConfig.numChunks })
+              .add("data", { type : "u32", size : splatConfig.maxSlots })
+              .add("data2", { type : "u32", size : splatConfig.maxSlots })
+              .add("splatOffsetsTotal", { type : "u32", size : splatConfig.setup.numSplats });
 
     const radixDesc = radixBuild.build();
 
@@ -534,17 +376,23 @@ async function main() {
 
 
     // == creating the pipelines
+    const moduleForwardVertex = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['2d static tile']
+    );
+    const moduleForwardFragment = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['simple texture frag impl']
+    );
     const pipelineForwardDescriptor : GPURenderPipelineDescriptor = {
         label: 'texture result pipeline',
         layout: pipelineLayoutForward,
         vertex: {
             entryPoint: 'vs',
-            module: vsModule,
+            module: moduleForwardVertex,
             buffers: [],
         },
         fragment: {
             entryPoint: 'fs',
-            module: fsModule,
+            module: moduleForwardFragment,
             targets: [{ 
                 format: ctx.presentationFormat,
                 blend: {
@@ -576,11 +424,14 @@ async function main() {
 
     const pipeLineForwardBlob = ctx.device.createRenderPipeline(pipelineForwardDescriptor);  
 
+    const moduleRadixSetup = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['radix setup pass']
+    );
     const pipelineRadixSetup1 = ctx.device.createComputePipeline({
         label: 'radix setup pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: radixSetupModule,
+            module: moduleRadixSetup,
             entryPoint: 'registerSplats',
             constants: {
                 first_pass: 1,
@@ -592,7 +443,7 @@ async function main() {
         label: 'radix setup pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: radixSetupModule,
+            module: moduleRadixSetup,
             entryPoint: 'registerSplats',
             constants: {
                 first_pass: 0,
@@ -600,11 +451,14 @@ async function main() {
         },
     });
 
+    const moduleSplatCheck = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['splat refine pass']
+    );
     const pipelineSplatCheck1 = ctx.device.createComputePipeline({
         label: 'splat check pipelie',
         layout: pipelineLayoutSplatCheck,
         compute: {
-            module: splatCheckModule,
+            module: moduleSplatCheck,
             entryPoint: 'cs',
             constants: {
                 first_pass: 1,
@@ -616,7 +470,7 @@ async function main() {
         label: 'splat refine pipelie',
         layout: pipelineLayoutSplatCheck,
         compute: {
-            module: splatCheckModule,
+            module: moduleSplatCheck,
             entryPoint: 'cs',
             constants: {
                 first_pass: 0,
@@ -624,14 +478,17 @@ async function main() {
         },
     });
 
+    const moduleRadix = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['radix pass']
+    );
     const pipelineRadix : GPUComputePipeline[] = []
-    for(let i : number = 0; i < CONSTANTS.NUM_SORTS; i++) {
+    for(let i : number = 0; i < splatConfig.numRadixSorts; i++) {
         pipelineRadix.push(
             ctx.device.createComputePipeline({
                 label: 'radix compute pipeline',
                 layout: pipelineLayoutCompute,
                 compute: {
-                    module: radixModule,
+                    module: moduleRadix,
                     entryPoint: 'radixSort',
                     constants: {
                         pass_nr : i
@@ -642,51 +499,69 @@ async function main() {
     }
 
 
+    const moduleRadixOffset = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['radix offset pass']
+    );
     const pipelineRadixOffset = ctx.device.createComputePipeline({
         label: 'radix offset compute pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: radixOffsetModule,
+            module: moduleRadixOffset,
         },
     });
 
+    const moduleBackwardsCompute = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['backwards pass']
+    );
     const pipelineBackwardsCompute = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: csBackwardsModule,
+            module: moduleBackwardsCompute,
         },
     });
 
+    const moduleReduceCompute = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['reduce pass']
+    );
     const pipelineReduceCompute  = ctx.device.createComputePipeline({
         label: 'reduce gradients compute pipeline',
         layout: pipelineLayoutComputeReduceLayout,
         compute: {
-            module: reduceRadixModule,
+            module: moduleReduceCompute,
         },
     }); 
 
+    const moduleReduceLossCompute = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['loss reduce']
+    );
     const pipelineReduceLossCompute = ctx.device.createComputePipeline({
         label: 'reduce loss pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: reduceLossModule,
+            module: moduleReduceLossCompute,
         }
     });
 
+    const moduleAdamCompute = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['adam pass']
+    );
     const pipelineAdamCompute = ctx.device.createComputePipeline({
         label: 'adam compute pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: adamModule,
+            module: moduleAdamCompute,
         },
     });
 
+    const moduleOpacityReset = ctx.device.createShaderModule(
+        moduleDescriptorsParallel.modules['opacity reset']
+    );
     const pipelineOpacityReset = ctx.device.createComputePipeline({
         label: 'opacity fix pipeline',
         layout: pipelineLayoutCompute,
         compute: {
-            module: opacityResetModule,
+            module: moduleOpacityReset,
         },
     });
 
@@ -1118,10 +993,10 @@ async function main() {
             // radix setup
             pass.setPipeline(pipelineRadixSetup1);
             pass.setBindGroup(0, bindGroupBackwards);
-            pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+            pass.dispatchWorkgroups(splatConfig.radixSetupDispatches);
             // again the same thing
             pass.setPipeline(pipelineRadixSetup2);
-            pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+            pass.dispatchWorkgroups(splatConfig.radixSetupDispatches);
 
             // radix sort
             pipelineRadix.forEach((pipeline : GPUComputePipeline) => {
@@ -1135,7 +1010,7 @@ async function main() {
 
             // backwards
             pass.setPipeline(pipelineBackwardsCompute);
-            pass.dispatchWorkgroups(CONSTANTS.numChunksW, CONSTANTS.numChunksH);
+            pass.dispatchWorkgroups(splatConfig.chunksX, splatConfig.chunksY);
 
             // // reduce
             pass.setPipeline(pipelineReduceCompute);
@@ -1150,7 +1025,7 @@ async function main() {
             
             // adam
             pass.setPipeline(pipelineAdamCompute);
-            pass.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+            pass.dispatchWorkgroups(splatConfig.radixSetupDispatches);
             pass.end();
 
             const passRender = encoder.beginRenderPass(renderPassDescriptorTexture);
@@ -1169,7 +1044,7 @@ async function main() {
                 });
                 passOpacity.setPipeline(pipelineOpacityReset);
                 passOpacity.setBindGroup(0, bindGroupBackwards);
-                passOpacity.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+                passOpacity.dispatchWorkgroups(splatConfig.radixSetupDispatches);
                 passOpacity.end();
                 opacityStep = 0;
             }
@@ -1184,10 +1059,10 @@ async function main() {
                 passRefine.setPipeline(pipelineSplatCheck1);
                 passRefine.setBindGroup(0, bindGroupBackwards);
                 passRefine.setBindGroup(1, bindGroupSplatCheck);
-                passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+                passRefine.dispatchWorkgroups(splatConfig.radixSetupDispatches);
                 // again the same thing
                 passRefine.setPipeline(pipelineSplatCheck2);
-                passRefine.dispatchWorkgroups(CONSTANTS.NUM_DISPATCHES);
+                passRefine.dispatchWorkgroups(splatConfig.radixSetupDispatches);
                 passRefine.end();
                 refineStep = 0;
             }
@@ -1325,7 +1200,7 @@ async function main() {
         pane.addBinding(PARAMS_GUI, 'nSteps', {
             label: 'gd steps',
             min: 1,
-            max: CONSTANTS.nSteps,
+            max: splatConfig.loss.maxSteps,
             step: 10,
         });
 

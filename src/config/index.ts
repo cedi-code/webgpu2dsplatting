@@ -1,18 +1,18 @@
 import { DEFAULT_CONFIG, PARALLEL_MODULES } from './defaults';
 import { registry, type ShaderModuleConfig } from './shaders';
-import { type SplattingConfigInput, 
-    type SplattingContext, type RadixElement, type SplatSetupConfig, type SplatDynamicConfig, type LossConfig, type RefineDefaultsConfig, type RadixConfig, type FragmentConstantsConfig, type ShaderModulesDesciptors, 
+import { type SplattingConfigOverrides,
+    type SplattingContext, type RadixElement, type ShaderModulesDesciptors,
     type ShaderCodeSnippet} from './types';
 
 export function createSplattingContext(
-    userConfig?: SplattingConfigInput
+    userConfig?: SplattingConfigOverrides
 ): SplattingContext {
-    const setup = { ...DEFAULT_CONFIG.setup, ...userConfig?.setup }         as SplatSetupConfig;
-    const dynamic = { ...DEFAULT_CONFIG.dynamic, ...userConfig?.dynamic }   as SplatDynamicConfig;
-    const loss = { ...DEFAULT_CONFIG.loss, ...userConfig?.loss }            as LossConfig;
-    const refine = { ...DEFAULT_CONFIG.refine, ...userConfig?.refine }      as RefineDefaultsConfig;
-    const radix = { ...DEFAULT_CONFIG.radix, ...userConfig?.radix }         as RadixConfig;
-    const fragment = { ...DEFAULT_CONFIG.fragment, ...userConfig?.fragment } as FragmentConstantsConfig;
+    const setup = { ...DEFAULT_CONFIG.setup, ...userConfig?.setup };
+    const dynamic = { ...DEFAULT_CONFIG.dynamic, ...userConfig?.dynamic };
+    const loss = { ...DEFAULT_CONFIG.loss, ...userConfig?.loss };
+    const refine = { ...DEFAULT_CONFIG.refine, ...userConfig?.refine };
+    const radix = { ...DEFAULT_CONFIG.radix, ...userConfig?.radix };
+    const fragment = { ...DEFAULT_CONFIG.fragment, ...userConfig?.fragment };
 
     const chunksX = Math.floor((setup.sampleDim + setup.chunkWidth - 1) / setup.chunkWidth);
     const chunksY = Math.floor((setup.sampleDim + setup.chunkHeight - 1) / setup.chunkHeight);
@@ -66,25 +66,34 @@ export function createShaderModuleDescriptors(
 
     // map operation, turns moduleConfig into ModuleDescriptor    
     return {
-        modules: moduleConfig.map((config) : Partial<GPUShaderModuleDescriptor> => {
+        modules: moduleConfig.reduce<Record<string, GPUShaderModuleDescriptor>>
+        (
+            (module, config) => {
 
-            // goes throu each code snippet and figures out if it needs the shader context or not
-            const codeCombined = config.shaders.map((shaderName) : ShaderCodeSnippet => {
-                return registry[shaderName];
-            }).reduce((strSum, currCode) => {
-                if(typeof currCode == 'function') {
-                    return (strSum as string) + currCode(splatCtx);
-                }
-                else {
-                    return (strSum as string) + currCode;
-                }
-            }, "") as string;
+                // goes throu each code snippet and figures out if it needs the shader context or not
+                const codeArr = config.shaders.map((shaderName) : ShaderCodeSnippet =>
+                {
+                    return registry[shaderName];
+                });
 
-            return {
-                    label: config.label,
+                const codeCombined = codeArr.reduce((strSum, currCode) => {
+                    if(typeof currCode == 'function') {
+                        return (strSum as string) + currCode(splatCtx);
+                    }
+                    else {
+                        return (strSum as string) + currCode;
+                    }
+                }, "") as string;
+
+                module[config.label] = {
+                    label: config.label + "Module",
                     code: codeCombined,
-            };
-        })
+                };
+
+                return module;
+            },
+            {}
+        )
     };
 }
 

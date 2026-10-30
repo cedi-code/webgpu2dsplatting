@@ -1,9 +1,10 @@
+import type { ShaderModuleConfig } from "./shaders";
 import { type SplattingConfigInput } from "./types";
 
 export const DEFAULT_CONFIG: SplattingConfigInput = {
     setup: {
-        numSplats: 2000,
-        sampleDim: 512,
+        numSplats: 1000,
+        sampleDim: 500,
         chunkWidth: 16,
         chunkHeight: 16,
     },
@@ -37,3 +38,109 @@ export const DEFAULT_CONFIG: SplattingConfigInput = {
         tileScale: 4,
     },
 };
+
+export const PARALLEL_MODULES : ShaderModuleConfig[] = [
+    {
+        label: 'backwards pass',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "radixTypes",
+            "atomicOperations",
+            "gaussFunctions",
+            "adam",
+            "gradientBackwardsCompute",
+        ]
+    },
+    {
+        label: 'adam pass',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "radixTypes",
+            "atomicOperations",
+            "adam",
+            "adamOnGradients",
+        ]
+    },
+    {
+        label: 'radix setup pass',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "radixTypes",
+            "gaussFunctions",
+            "radixSetup",
+        ]
+    },
+    {
+        label: 'splat refine pass',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "radixTypes",
+            "gaussFunctions",
+            "adam",
+            "splatRefine",
+        ]
+    },
+    {
+        label: 'radix pass',
+        shaders: [
+            "radixTypes",
+            "sharedConstants",
+            "radixSort",
+        ]
+    },
+    {
+        label: 'radix offset pass',
+        shaders: [
+            "radixTypes",
+            "sharedConstants",
+            "radixChunkOffsets",
+        ]
+    },
+    {
+        label: 'reduce pass',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "radixTypes",
+            "adam",
+            "reduceGradientsRadix",
+        ]
+    },
+    {
+        label: 'loss reduce',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "adam",
+            "reduceLoss",
+        ]
+    },
+    {
+        label: 'opacity reset',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "opacityReset",
+        ]
+    },
+    {
+        label: '2d static tile',
+        shaders: [
+            "sharedConstants",
+            "gradTypes",
+            "gaussFunctions",
+            "gaussTileVertStorage",
+        ]
+    },
+    {
+        label: 'simple texture frag impl',
+        shaders: [
+            "sharedConstants",
+            "gaussFragBlob",
+        ]
+    }
+];

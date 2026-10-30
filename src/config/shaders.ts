@@ -2,17 +2,13 @@ import type { ShaderCodeSnippet, SplattingContext } from "./types";
 import { generateAtomicOperations } from "../myutils/ShaderTemplating";
 
 
-const SHADER_FOLDER = '../shaders';
-const JOURNEY_SHADER_FOLDER = '../journey/scripts/shaders/';
-
-
-const shadersJourney = import.meta.glob(JOURNEY_SHADER_FOLDER + '*.wgsl', {
+const shadersJourney = import.meta.glob('../journey/scripts/shaders/*.wgsl', {
   query: '?raw',
   import: 'default',
   eager: true,
 });
 
-const shadersDefault = import.meta.glob(SHADER_FOLDER + '*.wgsl', {
+const shadersDefault = import.meta.glob('../shaders/*.wgsl', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -34,7 +30,7 @@ const shaders = Object.fromEntries(
 
 const MACHINE_EPSILON = 1.19e-07;
 
-const CONSTANTS_F : ShaderCodeSnippet = (splatConfig : SplattingContext ) => {
+export const CONSTANTS_F : ShaderCodeSnippet = (splatConfig : SplattingContext ) => {
 
     const radixIndex = (name: string): number => {
         const element = splatConfig.radixElements.find((radixElement) => radixElement.name === name);
