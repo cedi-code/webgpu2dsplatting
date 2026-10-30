@@ -64,3 +64,9 @@ export interface SplattingContext extends SplattingConfigInput {
     groupChunkRatio: number;
     maxSlots: number;
 }
+
+export type ShaderCodeSnippet =  string | ((ctx : SplattingContext) => string) | (() => string);
+
+export interface ShaderModulesDesciptors {
+    modules : Partial<GPUShaderModuleDescriptor>[];
+}
