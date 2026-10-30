@@ -1,20 +1,18 @@
 import { Pane } from 'tweakpane';
 
-import { vec2, vec3, type Vec2 } from "wgpu-matrix";
+import { vec2, vec3 } from "wgpu-matrix";
 
 import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBuilder } from '../../../myutils/BufferHelper';
 
-import { type ArrayType, type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
+import { type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
 
 import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
-import { generateAtomicOperations } from '../../../myutils/ShaderTemplating';
 import { moduleDescriptorsParallel, splatConfig } from '../../../config';
-import { PARALLEL_MODULES } from '../../../config/defaults';
-import { CONSTANTS_F } from '../../../config/shaders';
-import type { SplattingContext } from '../../../config/types';
+import { DEFAULT_GUI_VISIBILITY } from '../../../config/defaults';
+import type { GuiVisibility } from '../../../config/types';
 
 async function loadImageBitmap(url : string) : Promise<ImageBitmap> {
     const res = await fetch(url);
@@ -39,8 +37,7 @@ const canvasDim = {
 
 const ctx = await getWebGPUctx({ canvasId: canvasId});
 
-
-async function main() {
+async function main(guiVisibility: Partial<GuiVisibility>) {
 
     if(!ctx) {
         return;
@@ -48,16 +45,11 @@ async function main() {
 
     const FPS = 30;
 
-    const radixIndex = (name: string): number => {
-        const element = splatConfig.radixElements.find((radixElement) => radixElement.name === name);
-        if (!element) {
-            throw new Error(`Missing radix element "${name}" in splatConfig`);
-        }
-        return element.index;
-    };
-
     // prints the current constants
-    console.table(splatConfig);
+    console.table(splatConfig.setup);
+    console.table(splatConfig.dynamic);
+    console.table(splatConfig.refine);
+
 
     const paramBuilder = new UniformBufferDescriptorBuilder('params storage buffer', 'storage', 'copy_src_dst', splatConfig.setup.numSplats);
     paramBuilder.add('pos', "vec2f")
@@ -1181,39 +1173,43 @@ async function main() {
 
 
 
-        pane.addBinding(PARAMS_GUI, 'blobs', {
+        const blobsBinding = pane.addBinding(PARAMS_GUI, 'blobs', {
             label: 'show blobs',
-        }).on('change', (ev) => {
-            let showBlob = ev.value;
+        });
+        blobsBinding.hidden = !guiVisibility.blobs;
+        blobsBinding.on('change', (ev) => {
             ctx.renderPassDescriptor = renderPassDescriptorScreen;
             render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
-
         });
 
-        pane.addBinding(PARAMS_GUI, 'lossWeight', {
+        const lossWeightBinding = pane.addBinding(PARAMS_GUI, 'lossWeight', {
             label: 'L2 <-> L1',
             min: 0.0,
             max: 1.0,
             step: 0.1,
         });
+        lossWeightBinding.hidden = !guiVisibility.lossWeight;
 
-        pane.addBinding(PARAMS_GUI, 'nSteps', {
+        const nStepsBinding = pane.addBinding(PARAMS_GUI, 'nSteps', {
             label: 'gd steps',
             min: 1,
             max: splatConfig.loss.maxSteps,
             step: 10,
         });
+        nStepsBinding.hidden = !guiVisibility.nSteps;
 
-        pane.addBinding(PARAMS_GUI, 'speed', {
+        const speedBinding = pane.addBinding(PARAMS_GUI, 'speed', {
             label: 'gd speed',
             min: 0,
             max: 2,
             step: 0.1,
         });
+        speedBinding.hidden = !guiVisibility.speed;
 
         const refinePane = pane.addFolder({
             title: 'refinement'
         });
+        refinePane.hidden = !guiVisibility.refinement;
 
         const refineSlider = refinePane.addBinding(PARAMS_GUI, 'refineSteps', {
             label: 'refine after:',
@@ -1243,7 +1239,8 @@ async function main() {
         const refineParams = refinePane.addFolder({
             title: 'refinment params',
             expanded: false,
-        })
+        });
+        refineParams.hidden = !guiVisibility.refinementParams;
 
         const refineUniformParams = {
             alphaCutOff: splatConfig.refine.alphaCutoff,
@@ -1283,11 +1280,11 @@ async function main() {
             updateUniform('scaleDivideConst', ev.value);
         });
 
-        // copilot added
         const gdButton = pane.addButton({
             title: 'gradient descent',
             label: 'step'
         });
+        gdButton.hidden = !guiVisibility.gradientDescent;
         updateGDButton = (running: boolean) => {
             gdButton.title = running ? 'stop gradient descent' : 'gradient descent';
             gdButton.label = running ? 'stop' : 'step';
@@ -1307,4 +1304,4 @@ async function main() {
     
 }
 
-main();
+main(DEFAULT_GUI_VISIBILITY);

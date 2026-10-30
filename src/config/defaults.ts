@@ -1,5 +1,15 @@
 import type { ShaderModuleConfig } from "./shaders";
-import { type SplattingConfigInput } from "./types";
+import { type GuiVisibility, type SplattingConfigInput } from "./types";
+
+export const DEFAULT_GUI_VISIBILITY: GuiVisibility = {
+    blobs: true,
+    lossWeight: true,
+    nSteps: true,
+    speed: true,
+    refinement: true,
+    refinementParams: true,
+    gradientDescent: true,
+};
 
 export const DEFAULT_CONFIG: SplattingConfigInput = {
     setup: {

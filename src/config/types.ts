@@ -40,6 +40,16 @@ export interface FragmentConstantsConfig {
     tileScale: number;
 }
 
+export interface GuiVisibility {
+    blobs: boolean;
+    lossWeight: boolean;
+    nSteps: boolean;
+    speed: boolean;
+    refinement: boolean;
+    refinementParams: boolean;
+    gradientDescent: boolean;
+}
+
 // Master Raw Input Config
 export interface SplattingConfigInput {
     setup: SplatSetupConfig;
