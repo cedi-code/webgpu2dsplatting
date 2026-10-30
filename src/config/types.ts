@@ -42,12 +42,12 @@ export interface FragmentConstantsConfig {
 
 // Master Raw Input Config
 export interface SplattingConfigInput {
-    setup: SplatSetupConfig;
-    dynamic: SplatDynamicConfig;
-    loss: LossConfig;
-    refine: RefineDefaultsConfig;
-    radix: RadixConfig;
-    fragment: FragmentConstantsConfig;
+    setup: Partial<SplatSetupConfig>;
+    dynamic: Partial<SplatDynamicConfig>;
+    loss: Partial<LossConfig>;
+    refine: Partial<RefineDefaultsConfig>;
+    radix: Partial<RadixConfig>;
+    fragment: Partial<FragmentConstantsConfig>;
 }
 
 // The Final Compiled Context (includes all computed/derived constants for shaders/buffers)
@@ -65,7 +65,7 @@ export interface SplattingContext extends SplattingConfigInput {
     maxSlots: number;
 }
 
-export type ShaderCodeSnippet =  string | ((ctx : SplattingContext) => string) | (() => string);
+export type ShaderCodeSnippet =  string | ((ctx : SplattingContext) => string);
 
 export interface ShaderModulesDesciptors {
     modules : Partial<GPUShaderModuleDescriptor>[];

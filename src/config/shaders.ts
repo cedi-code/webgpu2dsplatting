@@ -1,21 +1,36 @@
 import type { ShaderCodeSnippet, SplattingContext } from "./types";
 import { generateAtomicOperations } from "../myutils/ShaderTemplating";
 
-import shaderCodeCompute from '../journey/scripts/shaders/gradientBackwardsCompute.wgsl?raw';
-import gaussFrag from '../journey/scripts/shaders/gaussFragBlob.wgsl?raw';
-import gaussTileVertStorage from '../journey/scripts/shaders/gaussTileVertStorage.wgsl?raw';
-import adamCompute from '../journey/scripts/shaders/adamOnGradients.wgsl?raw';
-import radixSetup from '../journey/scripts/shaders/radixSetup.wgsl?raw';
-import radixCompute from '../journey/scripts/shaders/radixSort.wgsl?raw';
-import reduceRadixCompute from '../journey/scripts/shaders/reduceGradientsRadix.wgsl?raw';
-import reduceLossCompute from '../journey/scripts/shaders/reduceLoss.wgsl?raw';
-import radixOffsets from '../journey/scripts/shaders/radixChunkOffsets.wgsl?raw';
-import opacityReset from '../journey/scripts/shaders/opacityReset.wgsl?raw';
 
-import shaderGaussFunctions from '../shaders/gaussFunctions.wgsl?raw';
-import adamShad from '../shaders/adam.wgsl?raw';
-import shaderGradTypes from '../shaders/gradTypes.wgsl?raw';
-import radixTypes from '../shaders/radixTypes.wgsl?raw'
+const SHADER_FOLDER = '../shaders';
+const JOURNEY_SHADER_FOLDER = '../journey/scripts/shaders/';
+
+
+const shadersJourney = import.meta.glob(JOURNEY_SHADER_FOLDER + '*.wgsl', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+const shadersDefault = import.meta.glob(SHADER_FOLDER + '*.wgsl', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+
+const rawShaders = { ...shadersJourney, ...shadersDefault };
+
+// GEMINI: Transform the object keys from full paths to just filenames
+const shaders = Object.fromEntries(
+  Object.entries(rawShaders).map(([path, content]) => {
+    const fileName = path.split('/').pop()?.replace('.wgsl', '') ?? path;
+    return [fileName, content];
+  })
+);
+
+
+
 
 const MACHINE_EPSILON = 1.19e-07;
 
@@ -29,6 +44,7 @@ const CONSTANTS_F : ShaderCodeSnippet = (splatConfig : SplattingContext ) => {
         return element.index;
     };
 
+    // ADD NEW CONSTANTS HERE
     return Object.entries({
         NUM_SPLATS : splatConfig.setup.numSplats,
         xRAY : splatConfig.fragment.xRAY,
@@ -56,21 +72,31 @@ const CONSTANTS_F : ShaderCodeSnippet = (splatConfig : SplattingContext ) => {
         NUM_CHUNKS: splatConfig.numChunks
     }).map(([k, v]) => `const ${k} = ${v};`).join('\n');
 };
+
+// ADD NEW SHADER FILES HERE
 export const registry = {
     sharedConstants: CONSTANTS_F,
-    gradientBackwardsCompute : shaderCodeCompute,
-    gaussFunctions : shaderGaussFunctions,
-    gaussTileVertStorage : gaussTileVertStorage,
-    gaussFragBlob : gaussFrag,
-    adam : adamShad,
-    adamOnGradients : adamCompute,
-    gradTypes : shaderGradTypes,
-    radixSetup : radixSetup,
-    radixSort : radixCompute,
-    radixTypes : radixTypes,
-    reduceGradientsRadix : reduceRadixCompute,
-    reduceLoss : reduceLossCompute,
-    radixChunkOffsets : radixOffsets,
-    opacityReset : opacityReset,
+    gradientBackwardsCompute : shaders['gradientBackwardsCompute'],
+    gaussFunctions : shaders['gaussFunctions'],
+    gaussTileVertStorage : shaders['gaussTileVertStorage'],
+    gaussFragBlob : shaders['gaussFragBlob'],
+    adam : shaders['adam'],
+    adamOnGradients : shaders['adamOnGradients'],
+    gradTypes : shaders['gradTypes'],
+    radixSetup : shaders['radixSetup'],
+    radixSort : shaders['radixSort'],
+    radixTypes : shaders['radixTypes'],
+    reduceGradientsRadix : shaders['reduceGradientsRadix'],
+    reduceLoss : shaders['reduceLoss'],
+    radixChunkOffsets : shaders['radixChunkOffsets'],
+    opacityReset : shaders['opacityReset'],
+    splatRefine : shaders['splatRefine'],
     atomicOperations : generateAtomicOperations(),
 } satisfies Record<string, ShaderCodeSnippet>;
+
+export type ShaderName = keyof typeof registry;
+
+export interface ShaderModuleConfig {
+    label: string;
+    shaders: ShaderName[];
+};
