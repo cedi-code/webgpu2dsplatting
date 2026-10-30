@@ -6,21 +6,23 @@ import { bufferManager, UniformBufferDescriptorBuilder, VertexBufferDescriptorBu
 
 import { type UniformBufferDescriptor } from '../../../mytypes/BufferDescriptors';
 
-import { getWebGPUctx, loadImageBitmap, render } from '../../../myutils/ContextHelpers';
+import { getWebGPUctx, render } from '../../../myutils/ContextHelpers';
 
 import { parseParams, type FlatParams, createLossPlot } from '../../../myutils/LogHelpers';
 
-import { defaultSplatConfig, moduleDescriptorsParallel } from '../../../config';
-import { DEFAULT_GUI_VISIBILITY } from '../../../config/defaults';
+import { defaultSplatConfig, createShaderModuleDescriptors } from '../../../config';
+import { DEFAULT_GUI_VISIBILITY, PARALLEL_MODULES } from '../../../config/defaults';
 import type { GuiVisibility, SplattingContext } from '../../../config/types';
 import type { ctxWebGPU } from '../../../mytypes';
 import type uPlot from 'uplot';
+import { exampleSplatsRedBlueInit, imageGridSplats, loadImageBitmap, randomSplatInit } from '../../../myutils/MyUtils';
 
 
 export type mainCtx = {
     webgpu : ctxWebGPU;
     config : SplattingContext;
-    gui : GuiVisibility;
+    init : "random" | "grid" | "example";
+    gui : Partial<GuiVisibility>;
     image : ImageBitmap;
     pane : Pane;
     plot? : uPlot;
@@ -35,6 +37,9 @@ export async function main(settings : mainCtx) {
     const source = settings.image; // image
     const pane = settings.pane;
     const lossPlot = settings.plot;
+    const initMethod = settings.init;
+
+    const moduleDescriptors = createShaderModuleDescriptors(PARALLEL_MODULES, splatConfig);
 
     if(!ctx) {
         return;
@@ -366,10 +371,10 @@ export async function main(settings : mainCtx) {
 
     // == creating the pipelines
     const moduleForwardVertex = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['2d static tile']
+        moduleDescriptors.modules['2d static tile']
     );
     const moduleForwardFragment = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['simple texture frag impl']
+        moduleDescriptors.modules['simple texture frag impl']
     );
     const pipelineForwardDescriptor : GPURenderPipelineDescriptor = {
         label: 'texture result pipeline',
@@ -414,7 +419,7 @@ export async function main(settings : mainCtx) {
     const pipeLineForwardBlob = ctx.device.createRenderPipeline(pipelineForwardDescriptor);  
 
     const moduleRadixSetup = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['radix setup pass']
+        moduleDescriptors.modules['radix setup pass']
     );
     const pipelineRadixSetup1 = ctx.device.createComputePipeline({
         label: 'radix setup pipeline',
@@ -441,7 +446,7 @@ export async function main(settings : mainCtx) {
     });
 
     const moduleSplatCheck = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['splat refine pass']
+        moduleDescriptors.modules['splat refine pass']
     );
     const pipelineSplatCheck1 = ctx.device.createComputePipeline({
         label: 'splat check pipelie',
@@ -468,7 +473,7 @@ export async function main(settings : mainCtx) {
     });
 
     const moduleRadix = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['radix pass']
+        moduleDescriptors.modules['radix pass']
     );
     const pipelineRadix : GPUComputePipeline[] = []
     for(let i : number = 0; i < splatConfig.numRadixSorts; i++) {
@@ -489,7 +494,7 @@ export async function main(settings : mainCtx) {
 
 
     const moduleRadixOffset = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['radix offset pass']
+        moduleDescriptors.modules['radix offset pass']
     );
     const pipelineRadixOffset = ctx.device.createComputePipeline({
         label: 'radix offset compute pipeline',
@@ -500,7 +505,7 @@ export async function main(settings : mainCtx) {
     });
 
     const moduleBackwardsCompute = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['backwards pass']
+        moduleDescriptors.modules['backwards pass']
     );
     const pipelineBackwardsCompute = ctx.device.createComputePipeline({
         label: 'gd compute pipeline',
@@ -511,7 +516,7 @@ export async function main(settings : mainCtx) {
     });
 
     const moduleReduceCompute = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['reduce pass']
+        moduleDescriptors.modules['reduce pass']
     );
     const pipelineReduceCompute  = ctx.device.createComputePipeline({
         label: 'reduce gradients compute pipeline',
@@ -522,7 +527,7 @@ export async function main(settings : mainCtx) {
     }); 
 
     const moduleReduceLossCompute = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['loss reduce']
+        moduleDescriptors.modules['loss reduce']
     );
     const pipelineReduceLossCompute = ctx.device.createComputePipeline({
         label: 'reduce loss pipeline',
@@ -533,7 +538,7 @@ export async function main(settings : mainCtx) {
     });
 
     const moduleAdamCompute = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['adam pass']
+        moduleDescriptors.modules['adam pass']
     );
     const pipelineAdamCompute = ctx.device.createComputePipeline({
         label: 'adam compute pipeline',
@@ -544,7 +549,7 @@ export async function main(settings : mainCtx) {
     });
 
     const moduleOpacityReset = ctx.device.createShaderModule(
-        moduleDescriptorsParallel.modules['opacity reset']
+        moduleDescriptors.modules['opacity reset']
     );
     const pipelineOpacityReset = ctx.device.createComputePipeline({
         label: 'opacity fix pipeline',
@@ -626,113 +631,24 @@ export async function main(settings : mainCtx) {
         { width: source.width, height: source.height }
     );
 
-    const posOff    = paramDesc.attributes[0].offset;
-    const scaleOff  = paramDesc.attributes[1].offset;
-    const rotOff    = paramDesc.attributes[2].offset;
-    const colorOff  = paramDesc.attributes[3].offset;
-    const alphaOff  = paramDesc.attributes[4].offset;
-
     const input = new Float32Array(paramDesc.size);
-    const unitS = paramDesc.unitSize!;
-    let nextUnit = unitS;
 
-    let minimumS = 2;
-    let randomSplatInit = (n : number) => {
-        for(let i = 0; i < n; i++) {
-            let rndPos = vec2.clamp(vec2.create(Math.random(), Math.random()), 0.1, 0.9);
-            input.set(rndPos, posOff + unitS * i);
+    switch(initMethod) {
+        case 'example':
+            exampleSplatsRedBlueInit(paramDesc, input);
+            break;
+        case 'random':
+            randomSplatInit(splatConfig.dynamic.activeSplats, paramDesc, input);
+            break;
+        case 'grid':
+            imageGridSplats(
+                splatConfig.dynamic.activeSplats, 
+                source.width, 
+                source.height, 
+                paramDesc, 
+                input);
 
-            let rndScale = vec2.add(
-                vec2.create(minimumS,minimumS), 
-                vec2.scale(vec2.create(Math.random(), Math.random()), 2.0)
-            );
-            input.set(rndScale, scaleOff + unitS * i);
-
-            let rndRot = Math.PI * Math.random();
-            input.set([rndRot], rotOff + unitS * i);
-
-            let rndColor = vec3.add(
-                vec3.create(1),
-                vec3.scale(vec3.create(Math.random(), Math.random(), Math.random()), 9.0)
-            );
-            input.set(rndColor, colorOff + unitS * i);
-
-            let rndAlpha = 4.0 + Math.random() * 4.0;
-            input.set([rndAlpha], alphaOff + unitS * i);
-        }
     }
-
-    function imageGridSplats(
-        n: number,
-        width : number,
-        height : number,
-    ) {
-
-        const cols = Math.ceil(Math.sqrt(n * width / height));
-        const rows = Math.ceil(n / cols);
-        const scaleX = width / cols;
-        const scaleY = height / rows;
-        const logScaleX = Math.log(3000 / scaleX);
-        const logScaleY = Math.log(3000 / scaleY);
-
-        for (let i = 0; i < n; i++) {
-            const col = i % cols;
-            const row = Math.floor(i / cols);
-
-            const x0 = Math.floor(col * width / cols);
-            const x1 = Math.floor((col + 1) * width / cols);
-            const y0 = Math.floor(row * height / rows);
-            const y1 = Math.floor((row + 1) * height / rows);
-
-            input.set([
-                (col + 0.5) / cols,
-                (row + 0.5) / rows,
-            ], posOff + unitS * i);
-
-            input.set(
-                [logScaleX, logScaleY],
-                scaleOff + unitS * i
-            );
-
-            input.set([0], rotOff + unitS * i);
-
-            input.set([
-                 8,
-                 8,
-                 8,
-            ], colorOff + unitS * i);
-
-            input.set([4], alphaOff + unitS * i);
-        }
-    }
-
-    imageGridSplats(splatConfig.dynamic.activeSplats, source.width*2, source.height*2);
-
-    // randomSplatInit(activeSplats);
-
-    // // gauss 1
-    // input.set([0.9, 0.3],       posOff);
-    // input.set([1.5, 1.5],       scaleOff);
-    // input.set([0.0],            rotOff);
-    // input.set([8.0, 1.0, 1.0],  colorOff);
-    // input.set([4.0],            alphaOff);
-
-    // // gauss 2
-    // input.set([0.3, 0.6],       nextUnit + posOff);
-    // input.set([0.7, 1.0],       nextUnit + scaleOff);
-    // input.set([0.0],            nextUnit + rotOff);
-    // input.set([1.0, 1.0, 8.0],  nextUnit + colorOff);
-    // input.set([4.0],            nextUnit + alphaOff);
-
-    const prtyPrint = (data : Float32Array) => {
-        const result : FlatParams[] = []
-        for(let i = 0; i < Math.min(splatConfig.dynamic.activeSplats, 30); i++) {
-            const splatData = data.subarray(unitS*i, unitS*(i+1));
-            result.push(parseParams(splatData, paramDesc));
-        }
-        console.table(result);
-    }
-    prtyPrint(input);
 
     ctx.device.queue.writeBuffer(paramBuffer, 0, input);
 
@@ -1312,6 +1228,7 @@ if(ctxWebgpu) {
     main({ 
         webgpu: ctxWebgpu,
         config : defaultSplatConfig,
+        init: "grid",
         gui : DEFAULT_GUI_VISIBILITY,
         image : source,
         pane: pane,

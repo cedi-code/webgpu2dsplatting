@@ -13,7 +13,19 @@
 
     <div class="markdown-body markdown-dark" id="markdown-refineStepsRemove"></div>
 
-    <div>insert canvas here</div>
+    <div class="markdown-body-2">
+      <div class="sliders-row">
+        <div>
+          <div class="slider" id="no-refine-slider">
+          </div>        
+        </div>
+        <canvas id="no-refine" height="256" width="256"></canvas>
+          <div class="plot" id="loss-plot-no">
+        </div>
+
+      </div>
+    </div>
+
     <div class="markdown-body markdown-dark" id="markdown-refineStepsDensify"></div>
 
 
@@ -22,10 +34,21 @@
       <a href="journey-optimization.html" class="button">Next 6. Optimize Depth</a>
     </div>
 
-    <div>insert canvas here</div>
+    <div class="markdown-body-2">
+      <div class="sliders-row">
+        <div>
+          <div class="slider" id="with-refine-slider">
+          </div>        
+        </div>
+        <canvas id="with-refine" height="256" width="256"></canvas>
+          <div class="plot" id="loss-plot-color">
+        </div>
+
+      </div>
+    </div>
 
     <script type="module" src="src/journey/mainJourney.ts"></script>
-    
+    <script type="module" src="src/journey/scripts/interactive/refinmentSetup.ts"></script>
     
   </body>
 </html>
