@@ -815,9 +815,9 @@ export async function main(settings : mainCtx) {
         nSteps : splatConfig.loss.maxSteps,
         speed : 0, // copilot added
         refineSteps : splatConfig.dynamic.refineAfter,
-        doRefine : true,
+        doRefine : splatConfig.dynamic.refineActive,
         opacitySteps: splatConfig.dynamic.opacityResetAfter,
-        doOpacitiy : true,
+        doOpacitiy : splatConfig.dynamic.opacityResetActive,
     }
 
 
@@ -1211,29 +1211,6 @@ export async function main(settings : mainCtx) {
         console.error("Device lost lmao, reason:", info.reason, info.message);
     });
     
-}
-const ctxWebgpu = await getWebGPUctx({ canvasId: "main"});
-
-if(ctxWebgpu) {
-    let plotHTMLElem = document.getElementById('loss-plot') ?? document.body
-    let lossPlot = createLossPlot(plotHTMLElem);
-
-    const testImageUrl = 'assets/cat.jpg';
-    const source = await loadImageBitmap(testImageUrl);
-
-    const pane = new Pane({
-            container: document.getElementById("gd-sliders") as HTMLElement,
-    });
-
-    main({ 
-        webgpu: ctxWebgpu,
-        config : defaultSplatConfig,
-        init: "grid",
-        gui : DEFAULT_GUI_VISIBILITY,
-        image : source,
-        pane: pane,
-        plot : lossPlot 
-    });
 }
 
 

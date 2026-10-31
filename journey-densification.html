@@ -6,6 +6,7 @@
     <title>webgpu-2dsplatting journey</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot/dist/uPlot.min.css" />
     <link rel="stylesheet" href="mystle.css">
   </head>
   <body>
@@ -15,24 +16,16 @@
 
     <div class="markdown-body-2">
       <div class="sliders-row">
-        <div>
           <div class="slider" id="no-refine-slider">
-          </div>        
-        </div>
-        <canvas id="no-refine" height="256" width="256"></canvas>
-          <div class="plot" id="loss-plot-no">
+          </div>     
+          <canvas id="no-refine" height="256" width="256"></canvas>
+          <div class="plot" id="loss-plot-no"></div>
         </div>
 
-      </div>
     </div>
+    
 
     <div class="markdown-body markdown-dark" id="markdown-refineStepsDensify"></div>
-
-
-      <div class="btn-group">
-      <a href="journey-parallel.html" class="button">Prev 4. Parallelize</a>
-      <a href="journey-optimization.html" class="button">Next 6. Optimize Depth</a>
-    </div>
 
     <div class="markdown-body-2">
       <div class="sliders-row">
@@ -45,6 +38,11 @@
         </div>
 
       </div>
+    </div>
+
+          <div class="btn-group">
+      <a href="journey-parallel.html" class="button">Prev 4. Parallelize</a>
+      <a href="journey-optimization.html" class="button">Next 6. Optimize Depth</a>
     </div>
 
     <script type="module" src="src/journey/mainJourney.ts"></script>

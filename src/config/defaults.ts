@@ -11,7 +11,9 @@ export const DEFAULT_CONFIG: SplattingConfigInput = {
     dynamic: {
         activeSplats: 500,
         refineAfter: 300,
+        refineActive : true,
         opacityResetAfter: 30,
+        opacityResetActive : true,
     },
     loss: {
         maxSteps: 100,

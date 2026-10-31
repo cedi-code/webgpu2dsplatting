@@ -8,7 +8,9 @@ export interface SplatSetupConfig {
 export interface SplatDynamicConfig {
     activeSplats: number;
     refineAfter: number;
+    refineActive: boolean;
     opacityResetAfter: number;
+    opacityResetActive : boolean;
 }
 
 export interface LossConfig {

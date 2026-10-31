@@ -66,7 +66,7 @@ export function createLossPlot(plotHTMLBody : HTMLElement, opts? : uPlot.Options
     if(!opts) {
         opts = {
             title: "Loss graph",
-            width: 300,
+            width: 256,
             height: 256,
             scales: {
                 x: {
@@ -93,7 +93,7 @@ export function createLossPlot(plotHTMLBody : HTMLElement, opts? : uPlot.Options
                     }
                 },
                 {
-                    label: "L2",
+                    label: "Loss",
                     labelGap: 8,
                     // scale: '%',
                     stroke: "red",
