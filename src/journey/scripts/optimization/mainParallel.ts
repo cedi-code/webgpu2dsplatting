@@ -632,24 +632,27 @@ export async function main(settings : mainCtx) {
 
     const input = new Float32Array(paramDesc.size);
 
-    switch(initMethod) {
-        case 'example':
-            exampleSplatsRedBlueInit(paramDesc, input);
-            break;
-        case 'random':
-            randomSplatInit(splatConfig.dynamic.activeSplats, paramDesc, input);
-            break;
-        case 'grid':
-            imageGridSplats(
-                splatConfig.dynamic.activeSplats, 
-                source.width, 
-                source.height, 
-                paramDesc, 
-                input);
+    const initParams = () => {
+        switch(initMethod) {
+            case 'example':
+                exampleSplatsRedBlueInit(paramDesc, input);
+                break;
+            case 'random':
+                randomSplatInit(splatConfig.dynamic.activeSplats, paramDesc, input);
+                break;
+            case 'grid':
+                imageGridSplats(
+                    splatConfig.dynamic.activeSplats, 
+                    source.width, 
+                    source.height, 
+                    paramDesc, 
+                    input);
 
+        }
+        ctx.device.queue.writeBuffer(paramBuffer, 0, input);
     }
 
-    ctx.device.queue.writeBuffer(paramBuffer, 0, input);
+    initParams();
 
     // gradient buffer
     let gradDesc = gradStorageDesc;
@@ -812,7 +815,7 @@ export async function main(settings : mainCtx) {
         blobs : false,
         lossWeight : 0.0,
         nSteps : splatConfig.loss.maxSteps,
-        speed : 0, // copilot added
+        speed : 0.5, // copilot added
         refineSteps : splatConfig.dynamic.refineAfter,
         doRefine : splatConfig.dynamic.refineActive,
         opacitySteps: splatConfig.dynamic.opacityResetAfter,
@@ -838,7 +841,6 @@ export async function main(settings : mainCtx) {
     let lossStepsReported = 0;     // copilot added
 
     let updateLossResults = async () => {
-        console.log(lossPlot);
         if(!lossPlot)
             return;
         // read loss output
@@ -1078,6 +1080,44 @@ export async function main(settings : mainCtx) {
         };
         animationFrameId = requestAnimationFrame(scheduleFrame);
     }
+    let resetGD = async () => {
+        if (runInProgress) {
+            cancelGD();
+        }
+        await ctx.device.queue.onSubmittedWorkDone();
+        // reset draw args 
+        ctx.device.queue.writeBuffer(drawBuffer, 0, drawArgs, 0);
+
+        // reset params
+        initParams();
+
+        // reset adam
+        ctx.device.queue.writeBuffer(adamMemBuffer, 0, adamMemV, 0);
+
+        // render on screen
+        // reset refine
+        refineStep = 0;
+        opacityStep = 0;
+
+        // reset texture
+        ctx.renderPassDescriptor = renderPassDescriptorTexture;
+        render(ctx, pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, true, drawBuffer);
+
+        // reset screen
+        ctx.renderPassDescriptor = renderPassDescriptorScreen;
+        render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
+
+        console.log("reset gd");
+        // reset loss
+        if(!lossPlot)
+            return;
+        completedSteps = 0;   
+        lossData = [];
+        lossSteps = [];
+        lossStepsReported = 0;
+        lossPlot.setData([lossSteps, lossData]);
+
+    };
     // == interactive suff, not really needed
     {
         
@@ -1188,10 +1228,21 @@ export async function main(settings : mainCtx) {
             updateUniform('scaleDivideConst', ev.value);
         });
 
+        const resetButton = pane.addButton({
+            title: 'reset',
+            label: 'reset'
+        });
+        
+        resetButton.hidden = !guiVisibility.gradientDescent;
+        resetButton.on('click', async () => {
+            await resetGD();
+
+        });
         const gdButton = pane.addButton({
             title: 'gradient descent',
             label: 'step'
         });
+        
         gdButton.hidden = !guiVisibility.gradientDescent;
         updateGDButton = (running: boolean) => {
             gdButton.title = running ? 'stop gradient descent' : 'gradient descent';
@@ -1204,6 +1255,8 @@ export async function main(settings : mainCtx) {
                 await runGD();
             }
         });
+
+
     }
 
     ctx.device.lost.then((info) => {

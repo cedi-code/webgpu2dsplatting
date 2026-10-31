@@ -12,8 +12,12 @@ const ctxWebgpuNoRefine = await getWebGPUctx({ canvasId: "no-refine"});
 if(ctxWebgpuNoRefine) {
     const splatConfig = createSplattingContext({
         setup : { numSplats : 20, sampleDim : 64 },
-        dynamic : { activeSplats : 2 },
-        loss : { maxSteps : 100},
+        dynamic : { 
+            activeSplats : 2, 
+            refineActive : false, 
+            opacityResetActive : false
+        },
+        loss : { maxSteps : 400},
     });
    
     let plotHTMLElem = document.getElementById('loss-plot-no') ?? document.body
