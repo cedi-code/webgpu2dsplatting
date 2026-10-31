@@ -6,16 +6,44 @@
     <title>webgpu-2dsplatting journey</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot/dist/uPlot.min.css" />
     <link rel="stylesheet" href="mystle.css">
   </head>
   <body>
     <h1>Parallelize Computation</h1>
 
+    <div class="markdown-body-2">
+      <div class="wip-sign">
+        <div class="wip-image"></div>
+        <div class="wip-text">
+          <h1>Working on Explaining it, code is done!</h1>
+          The demo already works, but the explenations still need more details and reworks!
+          <div class="btn-group">
+            <a href="journey-optimization.html" class="button">Demo Parallel</a>
+            <a href="journey-densification.html" class="button">Next 4. Refine Splats</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="markdown-body markdown-dark" id="markdown-parallelReduce"></div>
 
     <div class="markdown-body markdown-dark" id="markdown-radixSortAndItsFriends"></div>
 
-    <div>insert canvas here</div>
+    <div class="markdown-body markdown-dark" id="markdown-parallelDemo"></div>
+
+      <div class="markdown-body-2">
+      <div class="sliders-row">
+        <div>
+          <div class="slider" id="slider-jeff">
+          </div>        
+        </div>
+        <canvas id="parallel-jeff" height="256" width="256"></canvas>
+          <div class="plot" id="loss-plot-jeff">
+        </div>
+
+      </div>
+    </div>
 
     <div class="btn-group">
       <a href="journey-optimization.html" class="button">Prev 2. Optimization</a>
@@ -23,8 +51,10 @@
     </div>
 
 
+
     <script type="module" src="src/journey/mainJourney.ts"></script>
-    
+    <script type="module" src="src/journey/scripts/interactive/parallelSetup.ts"></script>
+
     
   </body>
 </html>

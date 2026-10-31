@@ -999,6 +999,7 @@ export async function main(settings : mainCtx) {
         // copilot added "finishRun"
         // ===
         const finishRun = async (isFinalRun: boolean) => {
+            console.log("finish run!");
             if (readbackInProgress) {
                 return;
             }
@@ -1039,8 +1040,11 @@ export async function main(settings : mainCtx) {
         // ===
         const scheduleFrame = (frameTime: number) => {
             if (completedSteps >= PARAMS_GUI.nSteps) {
+                console.log("scheduleFrame done, all steps completed");
                 runInProgress = false;
                 updateGDButton(false);
+
+                void finishRun(true);
                 return;
             }
 
@@ -1056,13 +1060,14 @@ export async function main(settings : mainCtx) {
                 })();
 
             const remainingSteps = PARAMS_GUI.nSteps - completedSteps;
+
             const stepCount = Math.min(remainingSteps, stepsThisFrame);
             if (stepCount > 0) {
                 submitSteps(stepCount);
                 completedSteps += stepCount;
                 ctx.renderPassDescriptor = renderPassDescriptorScreen;
                 render(ctx, PARAMS_GUI.blobs ? pipeLineForwardBlob : pipeLineForward, bindGroupForward, undefined, 6, splatConfig.dynamic.activeSplats, false, drawBuffer);
-                if (completedSteps < PARAMS_GUI.nSteps && frameTime - lastFinishTime >= 1000) {
+                if (frameTime - lastFinishTime >= 1000) {
                     lastFinishTime = frameTime;
                     void finishRun(false);
                 }

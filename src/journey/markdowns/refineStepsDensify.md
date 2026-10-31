@@ -178,3 +178,5 @@ fn cs() {
 ``` 
 
 ok now trying again with refine steps. we can approximate the image!
+
+Try changing the "refine after" parameter and activating the opacitiy refine (the gd does around 400 steps each run)
