@@ -15,7 +15,7 @@ interface BufferManager {
 
     init(device: GPUDevice): void;
 
-    createBuffer(descriptor : BufferDescriptor): GPUBuffer;
+    createBuffer(descriptor : BufferDescriptor, device?: GPUDevice): GPUBuffer;
 }
 
 function getByteBaseSize(format: GPUVertexFormat | UniformBaseType): number {
@@ -307,11 +307,12 @@ const bufferManager: BufferManager = {
         this.device = device;
     },
 
-    createBuffer(descriptor : BufferDescriptor): GPUBuffer {
-        if(!this.device) {
+    createBuffer(descriptor : BufferDescriptor, device?: GPUDevice): GPUBuffer {
+        const bufferDevice = device ?? this.device;
+        if(!bufferDevice) {
             throw new Error("BufferManager not initialized with device");
         }
-        const buffer = this.device.createBuffer({
+        const buffer = bufferDevice.createBuffer({
             label: descriptor.label,
             size: descriptor.sizeBytes,
             usage: descriptor.usage | GPUBufferUsage.COPY_DST,

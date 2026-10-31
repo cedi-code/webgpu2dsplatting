@@ -609,13 +609,12 @@ export async function main(settings : mainCtx) {
     // creating buffer
     bufferManager.init(ctx.device);
 
-    const paramBuffer = bufferManager.createBuffer(paramDesc);
+    const paramBuffer = bufferManager.createBuffer(paramDesc, ctx.device);
     const splatCheckBuffer = bufferManager.createBuffer({
         ...paramDesc,
         label: 'splat check ping-pong buffer',
-    });
-
-    const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc);
+    }, ctx.device);
+    const momentumPingPongBuffer = bufferManager.createBuffer(momentumPingPongDesc, ctx.device);
 
 
     const texture = ctx.device.createTexture({
@@ -655,12 +654,12 @@ export async function main(settings : mainCtx) {
     // gradient buffer
     let gradDesc = gradStorageDesc;
     gradDesc.label = 'gradient buffer';
-    const gradientBuffer = bufferManager.createBuffer(gradDesc);
+    const gradientBuffer = bufferManager.createBuffer(gradDesc, ctx.device);
 
     ctx.device.queue.writeBuffer(gradientBuffer, 0, new Float32Array(gradDesc.size));
 
     // loss result buffer (atomic uint array)
-    const lossBuffer = bufferManager.createBuffer(lossBuffDesc);
+    const lossBuffer = bufferManager.createBuffer(lossBuffDesc, ctx.device);
     const lossV = new Float32Array(lossBuffDesc.size);
     ctx.device.queue.writeBuffer(lossBuffer, 0, lossV);
 
@@ -670,7 +669,7 @@ export async function main(settings : mainCtx) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 
-    const adamMemBuffer = bufferManager.createBuffer(adamMemoryDesc);
+    const adamMemBuffer = bufferManager.createBuffer(adamMemoryDesc, ctx.device);
 
     // adam memory
     const adamMemV = new Float32Array(adamMemoryDesc.size);
@@ -678,7 +677,7 @@ export async function main(settings : mainCtx) {
 
     // == uniform stuff for interaction ==
 
-    const uniBuff = bufferManager.createBuffer(uniDesc);
+    const uniBuff = bufferManager.createBuffer(uniDesc, ctx.device);
     const uniV = new Float32Array(uniDesc.size);
     console.log(uniDesc.sizeBytes);
     const MACHINE_EPSILON = 1.19e-07; // this should be somewhere else
@@ -739,7 +738,7 @@ export async function main(settings : mainCtx) {
 
     // radix buffer setup
 
-    const radixBuff = bufferManager.createBuffer(radixDesc);
+    const radixBuff = bufferManager.createBuffer(radixDesc, ctx.device);
     const radixCounters = new Uint32Array(radixDesc.attributes[1].offset);
     ctx.device.queue.writeBuffer(radixBuff, 0, radixCounters, 0);
 
@@ -839,7 +838,7 @@ export async function main(settings : mainCtx) {
     let lossStepsReported = 0;     // copilot added
 
     let updateLossResults = async () => {
-
+        console.log(lossPlot);
         if(!lossPlot)
             return;
         // read loss output
@@ -1212,6 +1211,5 @@ export async function main(settings : mainCtx) {
     });
     
 }
-
 
 
