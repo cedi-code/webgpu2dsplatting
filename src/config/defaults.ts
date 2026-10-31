@@ -9,7 +9,7 @@ export const DEFAULT_CONFIG: SplattingConfigInput = {
         chunkHeight: 16,
     },
     dynamic: {
-        activeSplats: 500,
+        activeSplats: 800,
         refineAfter: 300,
         refineActive : true,
         opacityResetAfter: 30,

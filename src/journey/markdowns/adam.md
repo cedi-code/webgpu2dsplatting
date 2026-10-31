@@ -136,3 +136,7 @@ $$
 Same example as before, this time both have activation functions for scale $\sigma(s)$ but red uses ADAM, and blue uses our static stepsize $\alpha$.
 
 Red has much more *momentum* than blue :) 
+
+* [x] ~~gradient descent + compute shaders~~
+* [x] ~~Gradient 2d (+ Texture loading)~~
+* [x] ~~Adam~~

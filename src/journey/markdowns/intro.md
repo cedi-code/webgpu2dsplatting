@@ -7,13 +7,13 @@ as of writing this intro page my plan for making this project looks as follows:
 ### Rough Plan for making 2dgs in webgpu
 
 * [ ] [Render a 2d gaussian](journey-primitive.html) — *chapter 4*
-* [ ] Optimization Step — *chapter 5.1*
-* [ ] The densification and refinment step — *chapter 5.2*
+* [ ] [Optimization Step](journey-optimization.html) — *chapter 5.1*
+* [ ] [Parallelize the Optimization](journey-parallel.html) - *chapter 6*
+* [ ] [The densification and refinment step](journey-densification) — *chapter 5.2*
 
 **poc done**
-* [ ] Performance (finding bottelnecks)
-* [ ] Making it interactive / Experiment around
-
+* [ ] Experiment with depth
+* [ ] Performance Profiling (finding more bottelnecks)
 **finish up**
 
 ###### *markdown rendering is powerd by [marked](https://www.npmjs.com/package/marked), [shiki](https://www.npmjs.com/package/shiki) and [Katex](https://www.npmjs.com/package/katex)*

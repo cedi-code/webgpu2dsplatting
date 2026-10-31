@@ -175,6 +175,8 @@ fn gGrad(x :vec2f, p : Params) -> GaussParams {
 }
 ```
 
+
+
 </details>
 
 
@@ -404,3 +406,8 @@ this runtime is $O(n^2)$ where $n$ = #gaussians, ofc we can do better by first l
 Now in this demo we can have 2 gaussians that try to approximate 2 shapes with different colors that overlapp eachother:
 
 <img src="assets/overlappImage.jpg" style="transform: scaleY(-1);" width=250 />
+
+* [x] ~~gradient descent + compute shaders~~
+* [x] ~~Gradient 2d (+ Texture loading)~~
+* [x] ~~Adam~~
+* [x] ~~The other gradients~~

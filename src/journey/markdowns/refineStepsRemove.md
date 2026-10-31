@@ -1,12 +1,29 @@
 ## Refine
 
-What you may have noticed in the previous example is that a lot of splats just move out of the screen and "dissapear".
+Up to this chapter we can now:
 
-![insert gif here]()
+* [x] [Render a 2d gaussian](journey-primitive.html)
+* [x] [Optimizate gaussians to fit our image](journey-optimization.html)
+* [x] [Doing it parallel over gaussians and image pixels](journey-parallel.html)
 
-Yet, we still loop over them for our sorting. 
-So what we could do is remove these splats that leave our boundry after a couple of gradient descent steps.
+Yet we can improve the quality of our approximations even more by doing the thing they call:
+<div align="center" style="font-size: 2rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+  Refinment!
+</div>
 
+
+<div align="center">
+    <img src="assets/fourBlobs.jpg" width="200">
+</div>
+
+Lets say we would like to approximate this simple image above, Refinment has two elements
+
+| Element | Problem | Description | Visualization |
+| :--- | :--- | :--- | :--- |
+| **Pruning** | Too many splats | Removing unnecessary splats (for examle ones that go off screen) | <img src="assets/removing.gif" width="200" alt="Removing unnecessary splats"> |
+| **Densification** | Not enough splats | Creating more splats where they are needed (Making 4 splats out of 2) | <img src="assets/densification.gif" width="200" alt="Densification visualization"> |
+
+So we do this process after our splats have done a couple itterations like this:
 ```
 for(let i = 0; i < nSteps; i++)
     forwardPass()
@@ -16,11 +33,13 @@ for(let i = 0; i < nSteps; i++)
     reducePass()
     adamPass()
 
-    if i % refinment       // [!code ++]
-        refineSplatsPass() // [!code ++]
+    if i % 100       // after 100 steps we refine!
+        refineSplatsPass() 
 ```
 
-### Remove
+### Pruning (Removing Splats)
+
+Splats that go off screen should be removed, since they do not contriubte to the image at all and we need to loop over less of them.
 
 we can do a simple check if our mean is over a certain threshold of screen, we mark that splat as "remove".
 

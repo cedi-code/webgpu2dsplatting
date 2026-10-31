@@ -122,3 +122,4 @@ fn gradL(q : f32) -> f32 {
 ```
 You can try executing the compute shader yourself, and experiment with the parameters bellow:
 
+* [x] ~~gradient descent + compute shaders~~

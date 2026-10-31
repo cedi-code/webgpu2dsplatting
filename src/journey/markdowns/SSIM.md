@@ -266,3 +266,9 @@ $$
 applying this loss actually makes our performance worse in our usecase...the L1 error weighs the color error equally which with our priors that are very off (mostly behind black color). so the direction to go towards color or to go out of the screen is equal. in L2 this is not the case since there having matching colors is weightes more strongly, tending to move more towards that color. So for now we will keep the L2 loss.
 
 Next the current implementation only works for a couple gaussians until we get the same performance issues. there is a lot we can do that will be coverd in the next section!
+
+* [x] ~~gradient descent + compute shaders~~
+* [x] ~~Gradient 2d (+ Texture loading)~~
+* [x] ~~Adam~~
+* [x] ~~The other gradients~~
+* [ ] SSIM-Loss?

@@ -411,3 +411,5 @@ bellow you can see the activation function in action! red would with $\sigma(x)$
 
 ##### *sidenote: for binding both a texture to compute shader and a fragment shader you need to specify a layout, I will go further into detail later in this chapter.*
 
+* [x] ~~gradient descent + compute shaders~~
+* [x] ~~Gradient 2d (+ Texture loading)~~
