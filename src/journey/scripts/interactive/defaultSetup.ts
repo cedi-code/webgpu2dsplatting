@@ -15,7 +15,6 @@ export async function handleMediaUpload(file: File): Promise<void> {
 
     const source = await createImageBitmap(file);
     await splatController.setSource(source);
-    await splatController.reset();
 }
 
 const ctxWebgpu = await getWebGPUctx({ canvasId: "main"});
@@ -42,7 +41,7 @@ if(ctxWebgpu) {
     });
 
     const mediaUpload = document.getElementById("main-media-upload") as HTMLInputElement;
-    
+
     mediaUpload.addEventListener("change", () => {
         const [file] = mediaUpload.files ?? [];
         if (!file) {

@@ -11,15 +11,15 @@
   </head>
   <body>
 
-    <div class="sliders-row">
+        <canvas width="512" height="512" id="main"></canvas>
+      <div>
+          <label for="main-media-upload" class="button">Upload source image</label>
+          <input id="main-media-upload" type="file" accept="image/*" hidden>
+        </div>      
+      <div class="sliders-row">
         <div>
           <div class="slider" id="gd-sliders"></div>
           Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
-        </div>
-        <canvas width="512" height="512" id="main"></canvas>
-        <div>
-          <label for="main-media-upload" class="button">Upload source image</label>
-          <input id="main-media-upload" type="file" accept="image/*" hidden>
         </div>
         <div class="plot" id="loss-plot">
           Plot Powered by <a href="https://leeoniya.github.io/uPlot/" target="_blank">uPlot</a>

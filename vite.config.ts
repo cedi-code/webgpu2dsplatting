@@ -12,7 +12,7 @@ export default defineConfig({
         optimization: resolve(__dirname, 'journey-optimization.html'),
         parallel: resolve(__dirname, 'journey-parallel.html'),
         densification: resolve(__dirname, 'journey-densification.html'),
-
+        depth : resolve(__dirname, 'journey-depth.html'),
         test: resolve(__dirname, 'test.html'),
 
       },
