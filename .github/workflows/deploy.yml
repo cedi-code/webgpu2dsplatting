@@ -33,10 +33,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Download the zip attached to tag 'assets-v1'
-          gh release download assets-v1 --pattern "assetsV1.zip" --dir .
+          # Download the zip attached to tag 'assets-v2'
+          gh release download assets-v1 --pattern "assetsV2.zip" --dir .
           
-          unzip -o assetsV1.zip -d ./dist/
+          unzip -o assetsV2.zip -d ./dist/
 
       - uses: actions/upload-pages-artifact@v3
         with:
