@@ -866,7 +866,7 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
         blobs : false,
         lossWeight : 0.0,
         nSteps : splatConfig.loss.maxSteps,
-        speed : 0.5, // copilot added
+        speed : 1.0, // copilot added
         refineSteps : splatConfig.dynamic.refineAfter,
         doRefine : splatConfig.dynamic.refineActive,
         opacitySteps: splatConfig.dynamic.opacityResetAfter,
