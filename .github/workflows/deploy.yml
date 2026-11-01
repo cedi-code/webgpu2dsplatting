@@ -34,7 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Download the zip attached to tag 'assets-v2'
-          gh release download assets-v1 --pattern "assetsV2.zip" --dir .
+          gh release download assets-v2 --pattern "assetsV2.zip" --dir .
           
           unzip -o assetsV2.zip -d ./dist/
 
