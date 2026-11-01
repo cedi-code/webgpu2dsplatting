@@ -12,13 +12,14 @@ Yet we can improve the quality of our approximations even more by doing the thin
 </div>
 
 
+Lets say we would like to approximate this simple image bellow, Refinment gives us two cases to improve our quality.
 <div align="center">
     <img src="assets/fourBlobs.jpg" width="200">
 </div>
 
-Lets say we would like to approximate this simple image above, Refinment has two elements
 
-| Element | Problem | Description | Visualization |
+
+| Case | Problem | Description | Visualization |
 | :--- | :--- | :--- | :--- |
 | **Pruning** | Too many splats | Removing unnecessary splats (for examle ones that go off screen) | <img src="assets/removing.gif" width="200" alt="Removing unnecessary splats"> |
 | **Densification** | Not enough splats | Creating more splats where they are needed (Making 4 splats out of 2) | <img src="assets/densification.gif" width="200" alt="Densification visualization"> |

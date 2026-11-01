@@ -5,13 +5,13 @@ This is a more fundamental problem that originates since the start of the projec
 While testing my splater method for multiple images i kept noticing that very large splats would try to cover very large areas...
 
 ##### *jeff.jpg after 100 iteration, initalized with small blobs*
-<img height="300" src="../../../assets/documentationScreenshots/jeff100IterationBeforeBlurry.png" />
-<img height="300" src="../../../assets/documentationScreenshots/jeff100IterationBeforeBlobs.png" />
+<img height="300" src="assets/documentationScreenshots/jeff100IterationBeforeBlurry.png" />
+<img height="300" src="assets/documentationScreenshots/jeff100IterationBeforeBlobs.png" />
 
 
 ##### *jeff.jpg after 1k iteration, mostly big blobs making the image*
-<img height="300" src="../../../assets/documentationScreenshots/jeff1kIterationBeforeBlurry.png" />
-<img height="300" src="../../../assets/documentationScreenshots/jeff1kBeforeBlobs.png" />
+<img height="300" src="assets/documentationScreenshots/jeff1kIterationBeforeBlurry.png" />
+<img height="300" src="assets/documentationScreenshots/jeff1kBeforeBlobs.png" />
 
 ### Remove them?
 my first intuition was
@@ -55,19 +55,23 @@ this makes intuativly also sense to have big large details in the back, and high
 
 ### Depth Gradient
 
-Now how do we tell our optimizer to somehow put larger splats in the back and smaller splats to the front? We need our splats to optimize also over the depth $\mu_z$
+Now how do we tell our optimizer to somehow put larger splats in the back and smaller splats to the front? We need our splats to optimize also over the depth $\mu_z$:
 
 $$
+
 \mu_{old} = \begin{bmatrix}
 \mu_x \\
-\mu_y
-\end{bmatrix} \implies \mu_{new} = \begin{bmatrix}
+\mu_y \\
+\end{bmatrix}
+ \implies 
+ \mu_{new} = 
+\begin{bmatrix}
 \mu_x \\
 \mu_y \\
-\mu_z 
+\mu_z \\
 \end{bmatrix}
-$$ 
 
+$$
 I first tought of doing a perspective transform and have the splats always facing the camera. This would work if i also assign each splat a size in the z-dimension (depth). But actually we can just assume our splats are flat disks and still have them move in depth by changing our current alpha blending!
 
 Our current alpha blending looks as follows:

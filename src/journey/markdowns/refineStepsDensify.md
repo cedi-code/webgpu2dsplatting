@@ -1,15 +1,13 @@
 
 
-The paper proposes a solution for this called "Densification". It looks as follows:
+Todo "Densification" the paper proposes two way of solving the issue of creatin more splats, first measure a splats $i$ positinal gradient $\nabla_{\mu}g_i$.
 
-measure a splats $i$ positinal gradient $\nabla_{\mu}g_i$.
-* if $\nabla_{\mu}g_i$ is large after steps densify the splat!
-    * if $\nabla_{\mu}g_i$ and $\nabla_{s}g_i$ (scale) are high
 
-        $\implies$ split splat-$i$ (Over-reconstruction)
-    * if $\nabla_{\mu}g_i$ large only 
-    
-         $\implies$ duplicate splat-$i$ (Under-reconstruction)
+if $\nabla_{\mu}g_i$ is large after steps densify the splat!
+1. if $\nabla_{\mu}g_i$ and $\nabla_{s}g_i$ (scale) are high
+    $\implies$ split splat-$i$ (Over-reconstruction)
+2. if $\nabla_{\mu}g_i$ large only 
+    $\implies$ duplicate splat-$i$ (Under-reconstruction)
 
 ![densification figure](https://onchaings.xyz/assets/gaussian-densification-scheme-U_PUj6Nx.png)
 ##### figure from paper
