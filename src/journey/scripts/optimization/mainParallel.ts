@@ -28,13 +28,18 @@ export type mainCtx = {
     plot? : uPlot;
 } 
 
+export type MainController = {
+    setSource(source: ImageBitmap): Promise<void>;
+    reset(): Promise<void>;
+};
 
-export async function main(settings : mainCtx) {
+
+export async function main(settings : mainCtx): Promise<MainController | undefined> {
 
     const ctx = settings.webgpu;
     const splatConfig = settings.config;
     const guiVisibility = settings.gui;
-    const source = settings.image; // image
+    let source = settings.image; // image
     const pane = settings.pane;
     const lossPlot = settings.plot;
     const initMethod = settings.init;
@@ -624,11 +629,57 @@ export async function main(settings : mainCtx) {
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
-    ctx.device.queue.copyExternalImageToTexture(
-        { source, flipY: false },
-        { texture },
-        { width: source.width, height: source.height }
-    );
+    const normalizeSource = async (nextSource: ImageBitmap): Promise<ImageBitmap> => {
+        if (nextSource.width === texture.width && nextSource.height === texture.height) {
+            return nextSource;
+        }
+
+        const targetAspect = texture.width / texture.height;
+        const sourceAspect = nextSource.width / nextSource.height;
+        let cropWidth = nextSource.width;
+        let cropHeight = nextSource.height;
+
+        if (sourceAspect > targetAspect) {
+            cropWidth = nextSource.height * targetAspect;
+        } else {
+            cropHeight = nextSource.width / targetAspect;
+        }
+
+        const cropX = (nextSource.width - cropWidth) / 2;
+        const cropY = (nextSource.height - cropHeight) / 2;
+
+        return createImageBitmap(
+            nextSource,
+            cropX,
+            cropY,
+            cropWidth,
+            cropHeight,
+            {
+                resizeWidth: texture.width,
+                resizeHeight: texture.height,
+                resizeQuality: 'high',
+            },
+        );
+    };
+
+    const uploadSource = (nextSource: ImageBitmap) => {
+        ctx.device.queue.copyExternalImageToTexture(
+            { source: nextSource, flipY: false },
+            { texture },
+            { width: nextSource.width, height: nextSource.height }
+        );
+    };
+
+    const normalizedInitialSource = await normalizeSource(source);
+    uploadSource(normalizedInitialSource);
+    source = normalizedInitialSource;
+
+    const setSource = async (nextSource: ImageBitmap): Promise<void> => {
+        await ctx.device.queue.onSubmittedWorkDone();
+        const normalizedSource = await normalizeSource(nextSource);
+        uploadSource(normalizedSource);
+        source = normalizedSource;
+    };
 
     const input = new Float32Array(paramDesc.size);
 
@@ -1085,7 +1136,7 @@ export async function main(settings : mainCtx) {
         };
         animationFrameId = requestAnimationFrame(scheduleFrame);
     }
-    let resetGD = async () => {
+    const reset = async (): Promise<void> => {
         if (runInProgress) {
             cancelGD();
         }
@@ -1114,13 +1165,11 @@ export async function main(settings : mainCtx) {
 
         console.log("reset gd");
         // reset loss
-        if(!lossPlot)
-            return;
         completedSteps = 0;   
         lossData = [];
         lossSteps = [];
         lossStepsReported = 0;
-        lossPlot.setData([lossSteps, lossData]);
+        lossPlot?.setData([lossSteps, lossData]);
 
     };
     // == interactive suff, not really needed
@@ -1240,7 +1289,7 @@ export async function main(settings : mainCtx) {
         
         resetButton.hidden = !guiVisibility.gradientDescent;
         resetButton.on('click', async () => {
-            await resetGD();
+            await reset();
 
         });
         const gdButton = pane.addButton({
@@ -1267,7 +1316,9 @@ export async function main(settings : mainCtx) {
     ctx.device.lost.then((info) => {
         console.error("Device lost lmao, reason:", info.reason, info.message);
     });
-    
+
+    return {
+        setSource,
+        reset,
+    };
 }
-
-
