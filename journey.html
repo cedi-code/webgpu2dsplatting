@@ -17,7 +17,7 @@
       </section>
 
       <section class="controls-panel" aria-label="Source and renderer controls">
-        <h1>2d webgpu splatter</h1>
+        <img class="journey-title-image" src="assets/graphics3d_pipe.webp" alt="2D WebGPU splatter">
         <div class="source-carousel embla" aria-label="Choose a source image">
           <div class="embla__viewport">
             <div class="embla__container" id="source-slides">
@@ -36,11 +36,22 @@
             </div>
           </div>
         </div>
+        <div class="gd-progress" aria-live="polite">
+          <div id="gd-progress" role="progressbar" aria-label="Optimization progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="gd-progress-bar"></div>
+          </div>
+          <div class="gd-progress-label">Optimization progress: <span id="gd-progress-status">Ready</span></div>
+        </div>
         <input id="main-media-upload" type="file" accept="image/*" hidden>
 
-        <button class="settings-toggle" type="button" aria-expanded="false" aria-controls="settings-panel">
-          Show more settings
-        </button>
+        <div class="controls-actions">
+          <button class="settings-toggle" type="button" aria-expanded="false" aria-controls="settings-panel">
+            Show more settings
+          </button>
+          <button class="reset-button" id="journey-reset" type="button">
+            Reset
+          </button>
+        </div>
       </section>
 
       <div class="settings-panel" id="settings-panel" hidden>

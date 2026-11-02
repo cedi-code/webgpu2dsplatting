@@ -3,13 +3,14 @@ import { type GuiVisibility, type SplattingConfigInput } from "./types";
 
 export const DEFAULT_CONFIG: SplattingConfigInput = {
     setup: {
-        numSplats: 1000,
+        numSplats: 2000,
         sampleDim: 512,
         chunkWidth: 16,
         chunkHeight: 16,
+        FPS: 32,
     },
     dynamic: {
-        activeSplats: 800,
+        activeSplats: 2000,
         refineAfter: 300,
         refineActive : true,
         opacityResetAfter: 30,

@@ -3,6 +3,7 @@ export interface SplatSetupConfig {
     sampleDim: number;
     chunkWidth: number;
     chunkHeight: number;
+    FPS : number;
 }
 
 export interface SplatDynamicConfig {

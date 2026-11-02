@@ -30,7 +30,16 @@ export type mainCtx = {
 
 export type MainController = {
     setSource(source: ImageBitmap): Promise<void>;
+    runGD(): Promise<void>;
+    getGDProgress(): GDProgress;
     reset(): Promise<void>;
+};
+
+export type GDProgress = {
+    running: boolean;
+    completedSteps: number;
+    totalSteps: number;
+    stepsPerSecond: number;
 };
 
 
@@ -49,7 +58,7 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
     if(!ctx) {
         return;
     }
-    const FPS = 30;
+    const FPS = settings.config.setup.FPS;
     let lossData : number[]  = []
     let lossSteps: number[] = []
     // prints the current constants
@@ -924,6 +933,21 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
     let runInProgress = false;      // copilot added
     let cancelGD = () => {};        // copilot added
     let updateGDButton = (running: boolean) => {};   // copilot added
+    const getStepRate = (): number => {
+        if (PARAMS_GUI.speed === 0) {
+            return Number.POSITIVE_INFINITY;
+        }
+        if (PARAMS_GUI.speed === 1) {
+            return FPS;
+        }
+        return Math.pow(FPS, 2 - PARAMS_GUI.speed);
+    };
+    const getGDProgress = (): GDProgress => ({
+        running: runInProgress,
+        completedSteps,
+        totalSteps: PARAMS_GUI.nSteps,
+        stepsPerSecond: getStepRate(),
+    });
     let runGD = async () => {
         if (runInProgress) {
             return;
@@ -1319,6 +1343,8 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
 
     return {
         setSource,
+        runGD,
+        getGDProgress,
         reset,
     };
 }
