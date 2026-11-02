@@ -18,8 +18,11 @@
 
       <section class="controls-panel" aria-label="Source and renderer controls">
         <img class="journey-title-image" src="assets/titleTextCropped.gif" alt="2D Gaussian splatter">
+        <div class="source-instruction">
+          <p>Click an image!</p>
+          <p>Our upload your own</p>
+        </div>
         <div class="source-carousel embla" aria-label="Choose a source image">
-          <p>click on a image</p>
           <div class="embla__viewport">
             <div class="embla__container" id="source-slides">
               <button class="embla__slide source-slide is-selected" type="button" data-source="assets/cat.jpg">
@@ -74,6 +77,7 @@
       <div class="markdown-body markdown-dark markdown-panel" id="markdown-intro"></div>
 
       <nav class="btn-group journey-nav" aria-label="Journey chapters">
+        <h1>Blog</h1>
         <a href="journey-primitive.html" class="button">1. Render gaussian</a>
         <a href="journey-optimization.html" class="button">2. Optimization</a>
         <a href="journey-parallel.html" class="button">3. Parallelize Computation</a>

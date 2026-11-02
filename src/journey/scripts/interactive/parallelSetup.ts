@@ -18,7 +18,8 @@ if(ctxWebgpu) {
         dynamic : { 
             activeSplats : 1000, 
             refineActive : false, 
-            opacityResetActive : false
+            opacityResetActive : false,
+            stepSize: 0.05,
         },
         loss : { maxSteps : 100},
     });

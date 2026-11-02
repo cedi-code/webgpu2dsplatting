@@ -57,9 +57,26 @@ body {
 
 .journey-title-image {
   display: block;
-  width: 50%;
+  width: 70%;
   height: auto;
+}
+
+.source-instruction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 1rem;
   margin-bottom: 1.5rem;
+}
+
+.source-instruction p {
+  margin: 0;
+  color: #ffff55;
+  font-size: clamp(0.9rem, 1.7vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 2px 2px 0 #3f3f00;
 }
 
 .embla__viewport {
@@ -294,6 +311,10 @@ body {
   .controls-panel {
     order: 2;
     display: block;
+  }
+
+  .source-instruction {
+    width: 65%;
   }
 
   .settings-panel {

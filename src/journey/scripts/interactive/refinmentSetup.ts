@@ -15,7 +15,9 @@ if(ctxWebgpuNoRefine) {
         dynamic : { 
             activeSplats : 2, 
             refineActive : false, 
-            opacityResetActive : false
+            opacityResetActive : false,
+            stepSize: 0.05,
+
         },
         loss : { maxSteps : 400},
     });
@@ -49,11 +51,16 @@ const ctxWebgpuNoRefine2 = await getWebGPUctx({ canvasId: "with-refine"});
 
 if(ctxWebgpuNoRefine2) {
      const splatConfig = createSplattingContext({
-        setup : { numSplats : 200, sampleDim : 64 },
+        setup : { 
+            numSplats : 200, 
+            sampleDim : 64
+        },
         dynamic : { 
             activeSplats : 2,
             refineAfter : 150, 
-            opacityResetActive : false },
+            opacityResetActive : false,
+            stepSize: 0.05,
+        },
         loss : { maxSteps : 400},
     });
 
