@@ -3,28 +3,90 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>webgpu-2dsplatting</title>
+    <title>webgpu-2dsplatting journey</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot/dist/uPlot.min.css" />
     <link rel="stylesheet" href="mystle.css">
-
+    <link rel="stylesheet" href="copilot-style.css">
   </head>
   <body>
-    <h1>Index.html</h1>
-    <a href="journey.html">Link to journey</a>
-    <div class="sliders-row">
-        <div>
-          <div class="slider" id="gd-sliders"></div>
-          Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
-        </div>
+    <main class="journey-layout">
+      <section class="renderer-panel" aria-label="WebGPU renderer">
         <canvas width="512" height="512" id="main"></canvas>
-        <div class="plot" id="loss-plot">
-          Plot Powered by <a href="https://leeoniya.github.io/uPlot/" target="_blank">uPlot</a>
+      </section>
+
+      <section class="controls-panel" aria-label="Source and renderer controls">
+        <img class="journey-title-image" src="assets/titleTextCropped.gif" alt="2D Gaussian splatter">
+        <div class="source-instruction">
+          <p>Click an image!</p>
+          <p>Our upload your own</p>
         </div>
+        <div class="source-carousel embla" aria-label="Choose a source image">
+          <div class="embla__viewport">
+            <div class="embla__container" id="source-slides">
+              <button class="embla__slide source-slide is-selected" type="button" data-source="assets/cat.jpg">
+                <img src="assets/cat.jpg" alt="Cat source image">
+              </button>
+              <button class="embla__slide source-slide" type="button" data-source="assets/fourBlobs.jpg">
+                <img src="assets/fourBlobs.jpg" alt="Four blobs source image">
+              </button>
+              <label class="embla__slide source-slide source-upload" for="main-media-upload" aria-label="Add image">
+                <span class="upload-icon" aria-hidden="true">+</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="gd-progress" aria-live="polite">
+          <div id="gd-progress" role="progressbar" aria-label="Optimization progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="gd-progress-bar"></div>
+          </div>
+          <div class="gd-progress-label">Optimization progress: <span id="gd-progress-status">Ready</span></div>
+        </div>
+        <input id="main-media-upload" type="file" accept="image/*" hidden>
+
+        <div class="controls-actions">
+          <button class="settings-toggle" type="button" aria-expanded="false" aria-controls="settings-panel">
+            Show more settings
+          </button>
+          <button class="reset-button" id="journey-reset" type="button">
+            Reset
+          </button>
+        </div>
+      </section>
+
+      <div class="settings-panel" id="settings-panel" hidden>
+        <section class="settings-section tweakpane-section" aria-label="Tweakpane settings">
+          <div class="slider" id="gd-sliders"></div>
+          <p>Input powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a></p>
+
+        </section>
+        <section class="settings-section plot-section" aria-label="Loss graph">
+        <div class="box">
+          <div class="plot" id="loss-plot">
+            Plot powered by <a href="https://leeoniya.github.io/uPlot/" target="_blank">uPlot</a>
+          </div>
+        </div>
+
+        </section>
       </div>
+
+      <div class="markdown-body markdown-dark markdown-panel" id="markdown-intro"></div>
+
+      <nav class="btn-group journey-nav" aria-label="Journey chapters">
+        <h1>Blog</h1>
+        <a href="journey-primitive.html" class="button">1. Render gaussian</a>
+        <a href="journey-optimization.html" class="button">2. Optimization</a>
+        <a href="journey-parallel.html" class="button">3. Parallelize Computation</a>
+        <a href="journey-densification.html" class="button">4. Refining Splats</a>
+        <a href="journey-depth.html" class="button">5. Big Splats problem</a>
+      </nav>
+    </main>
+
+    <script type="module" src="src/journey/mainJourney.ts"></script>
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/src/journey/scripts/optimization/mainParallel.ts"></script>
     <script type="module" src="/src/journey/scripts/interactive/defaultSetup.ts"></script>
-
     
   </body>
 </html>
