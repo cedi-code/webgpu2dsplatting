@@ -15,12 +15,12 @@ export const DEFAULT_CONFIG: SplattingConfigInput = {
         refineActive : true,
         opacityResetAfter: 30,
         opacityResetActive : true,
-        stepSize: 0.05,
+        stepSize: 0.01,
         adamDecayB1: 0.9,
         adamDecayB2: 0.99,
     },
     loss: {
-        maxSteps: 100,
+        maxSteps: 300,
     },
     refine: {
         gradientPosThresh: 0.002,

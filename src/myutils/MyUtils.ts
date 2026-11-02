@@ -70,8 +70,8 @@ function imageGridSplats(
     const rows = Math.ceil(n / cols);
     const scaleX = width / cols;
     const scaleY = height / rows;
-    const logScaleX = Math.log(3000 / scaleX);
-    const logScaleY = Math.log(3000 / scaleY);
+    const logScaleX = Math.log(1000 / scaleX);
+    const logScaleY = Math.log(1000 / scaleY);
 
     for (let i = 0; i < n; i++) {
         const col = i % cols;
