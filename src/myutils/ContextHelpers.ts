@@ -48,21 +48,45 @@ function render(
     ctx.device.queue.submit([commandBuffer]);
 }
 
+function webgpuWarning() {
+    let modal = document.getElementById("webgpu-modal") as HTMLDialogElement | null;
+
+    if (!modal) {
+        modal = document.createElement("dialog");
+        modal.id = "webgpu-modal";
+        
+        modal.innerHTML = `
+            <h3 style="margin-top: 0; margin-bottom: 1rem;">WebGPU Not Supported</h3>
+            <p style="margin-bottom: 1rem;">Your browser needs WebGPU support to run this application.</p>
+            <p style="margin-bottom: 1.5rem;">Please visit <a href="https://enablegpu.com" target="_blank" style="color: #0066cc; text-decoration: underline;">enablegpu.com</a> or check your browser flags.</p>
+            <button id="webgpu-close-btn" >Close</button>
+            `;
+        
+        document.body.appendChild(modal);
+        const closeBtn = modal.querySelector("#webgpu-close-btn");
+            closeBtn?.addEventListener("click", () => {
+                modal?.close();
+            });
+    }
+
+    modal.showModal();
+}
+
 async function getWebGPUctx(options? : ctxOptions) : Promise< ctxWebGPU| null> {
     const gpu = navigator.gpu;
     if(!gpu) {
-        alert("browser needs WebGPU support");
+        webgpuWarning();
         return null;
     }
 
     const adapter = await gpu.requestAdapter();
     if(!adapter) {
-        alert("could not get gpu adapter");
+        webgpuWarning();
         return null;
     }
     const device = await adapter?.requestDevice();
     if(!device) {
-        alert("browser needs WebGPU support");
+        webgpuWarning();
         return null;
     }
 
