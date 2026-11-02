@@ -15,6 +15,9 @@ export const DEFAULT_CONFIG: SplattingConfigInput = {
         refineActive : true,
         opacityResetAfter: 30,
         opacityResetActive : true,
+        stepSize: 0.05,
+        adamDecayB1: 0.9,
+        adamDecayB2: 0.99,
     },
     loss: {
         maxSteps: 100,
@@ -152,6 +155,7 @@ export const DEFAULT_GUI_VISIBILITY: GuiVisibility = {
     blobs: true,
     lossWeight: true,
     nSteps: true,
+    adamStep: true,
     speed: true,
     refinement: true,
     refinementParams: true,

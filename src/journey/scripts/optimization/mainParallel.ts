@@ -126,7 +126,7 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
             .add('gradinetScalVari', "f32")
             .add('opacityReset', "f32")
             .add('scaleDivideConst', "f32")
-            .add('weightedLoss', "f32");
+            .add('lossWeight', "f32");
 
     const uniDesc = uniBuild.build();
 
@@ -745,9 +745,9 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
     console.log(uniDesc.sizeBytes);
     const MACHINE_EPSILON = 1.19e-07; // this should be somewhere else
     uniV.set([
-        0.05,
-        0.9,
-        0.999,
+        splatConfig.dynamic.stepSize,
+        splatConfig.dynamic.adamDecayB1,
+        splatConfig.dynamic.adamDecayB2,
         MACHINE_EPSILON,
         splatConfig.refine.alphaCutoff, // alpha cutoff
         splatConfig.refine.gradientPosThresh, // positional gradient cutoff
@@ -875,6 +875,9 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
         blobs : false,
         lossWeight : 0.0,
         nSteps : splatConfig.loss.maxSteps,
+        stepS : splatConfig.dynamic.stepSize,
+        b1 : splatConfig.dynamic.adamDecayB1,
+        b2 : splatConfig.dynamic.adamDecayB2,
         speed : 1.0, // copilot added
         refineSteps : splatConfig.dynamic.refineAfter,
         doRefine : splatConfig.dynamic.refineActive,
@@ -1213,6 +1216,8 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
             min: 0.0,
             max: 1.0,
             step: 0.1,
+        }).on('change', (ev) => {
+            updateUniform('lossWeight', ev.value);
         });
         lossWeightBinding.hidden = !guiVisibility.lossWeight;
 
@@ -1231,6 +1236,36 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
             step: 0.1,
         });
         speedBinding.hidden = !guiVisibility.speed;
+
+        const adamPane = pane.addFolder({
+            title: 'adam',
+        });
+        adamPane.hidden = !guiVisibility.adamStep;
+
+        adamPane.addBinding(PARAMS_GUI, 'stepS', {
+            label: 'step size',
+            step: settings.config.dynamic.stepSize / 10,
+        }).on('change', (ev) => {
+            updateUniform('lr', ev.value);
+        });
+
+        adamPane.addBinding(PARAMS_GUI, 'b1', {
+            label: 'decay b1',
+            min: 0,
+            max: 1,
+            step: 0.01,
+        }).on('change', (ev) => {
+            updateUniform('b1', ev.value);
+        });
+
+        adamPane.addBinding(PARAMS_GUI, 'b2', {
+            label: 'decay b2',
+            min: 0.95,
+            max: 1,
+            step: 0.0001,
+        }).on('change', (ev) => {
+            updateUniform('b2', ev.value);
+        });
 
         const refinePane = pane.addFolder({
             title: 'refinement'

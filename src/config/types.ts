@@ -12,6 +12,9 @@ export interface SplatDynamicConfig {
     refineActive: boolean;
     opacityResetAfter: number;
     opacityResetActive : boolean;
+    stepSize : number;
+    adamDecayB1 : number;
+    adamDecayB2 : number;
 }
 
 export interface LossConfig {
@@ -47,6 +50,7 @@ export interface GuiVisibility {
     blobs: boolean;
     lossWeight: boolean;
     nSteps: boolean;
+    adamStep : boolean;
     speed: boolean;
     refinement: boolean;
     refinementParams: boolean;
