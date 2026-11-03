@@ -7,7 +7,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        journey: resolve(__dirname, 'journey.html'),
+        playground: resolve(__dirname, 'playground.html'),
         primitive: resolve(__dirname, 'journey-primitive.html'),
         optimization: resolve(__dirname, 'journey-optimization.html'),
         parallel: resolve(__dirname, 'journey-parallel.html'),
