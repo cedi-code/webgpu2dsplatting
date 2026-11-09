@@ -240,7 +240,7 @@ async function main() {
 
     const textureForward = ctx.device.createTexture({
         label: 'forwardpass texture',
-        format: 'rgba8unorm',
+        format: ctx.presentationFormat,
         size: [256, 256],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
     });
@@ -381,7 +381,7 @@ async function main() {
     const source = await loadImageBitmap(testImageUrl);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
-        format: 'rgba8unorm',
+        format: ctx.presentationFormat,
         size: [source.width, source.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
     });

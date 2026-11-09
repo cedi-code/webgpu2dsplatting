@@ -216,7 +216,7 @@ const source = await loadImageBitmap(url);
 // create storage space
 const texture = ctx.device.createTexture({
     label: url,
-    format: 'rgba8unorm',
+    format: ctx.presentationFormat,
     size: [source.width, source.height],
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
 });

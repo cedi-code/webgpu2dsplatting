@@ -372,7 +372,7 @@ async function main(canvasName : string, plot : uPlot, pane : Pane,  showAdam : 
     console.log(source);
     const texture = ctx.device.createTexture({
         label: testImageUrl,
-        format: 'rgba8unorm',
+        format: ctx.presentationFormat,
         size: [source.width, source.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
     });

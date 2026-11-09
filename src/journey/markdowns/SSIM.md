@@ -147,7 +147,7 @@ Second point: "storing the result in a texture". We create the texture (of type 
     // create texture:
     const textureForward = ctx.device.createTexture({
         label: 'forwardpass texture',
-        format: 'rgba8unorm',
+        format: ctx.presentationFormat,
         size: [256, 256],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
     });

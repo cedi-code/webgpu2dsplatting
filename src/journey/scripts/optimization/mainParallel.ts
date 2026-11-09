@@ -593,7 +593,7 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
 
     const textureForward = ctx.device.createTexture({
         label: 'forwardpass texture',
-        format: 'rgba8unorm',
+        format: ctx.presentationFormat,
         size: [ctx.canvas.width, ctx.canvas.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
     });
@@ -633,7 +633,7 @@ export async function main(settings : mainCtx): Promise<MainController | undefin
 
     const texture = ctx.device.createTexture({
         label: 'loaded image',
-        format: 'rgba8unorm',
+        format: ctx.presentationFormat,
         size: [source.width, source.height],
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
     });
