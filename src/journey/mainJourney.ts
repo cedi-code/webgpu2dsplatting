@@ -72,4 +72,89 @@ for (const [path, loader] of Object.entries(modules)) {
     el.innerHTML = await marked.parse(rawText);
   }
 }
+
+const navigation = document.getElementById('chapter-navigation');
+const markdownBlocks = [...document.querySelectorAll<HTMLElement>('[id^="markdown-"]')];
+const content = document.querySelector<HTMLElement>('.journey-content');
+const journeyPage = document.querySelector<HTMLElement>('.journey-page');
+const chapterToggle = document.querySelector<HTMLButtonElement>('.chapter-toggle');
+
+chapterToggle?.addEventListener('click', () => {
+  const isOpen = journeyPage?.classList.toggle('chapters-open') ?? false;
+  chapterToggle.setAttribute('aria-expanded', String(isOpen));
+  chapterToggle.querySelector('[aria-hidden]')!.textContent = isOpen ? '←' : '→';
+});
+
+if (navigation && markdownBlocks.length > 0) {
+  const headings = markdownBlocks.flatMap((block) =>
+    [...block.querySelectorAll<HTMLHeadingElement>('h2, h3')]
+  );
+  const usedIds = new Set<string>();
+
+  const createHeadingId = (heading: HTMLHeadingElement) => {
+    const baseId = (heading.textContent ?? 'chapter')
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'chapter';
+    let id = baseId;
+    let suffix = 2;
+
+    while (usedIds.has(id) || document.getElementById(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    usedIds.add(id);
+    heading.id = id;
+    return id;
+  };
+
+  const chapterList = document.createElement('ul');
+  let subchapterList: HTMLUListElement | undefined;
+
+  for (const heading of headings) {
+    const link = document.createElement('a');
+    link.href = `#${createHeadingId(heading)}`;
+    link.textContent = heading.textContent ?? 'Chapter';
+
+    const item = document.createElement('li');
+    item.append(link);
+
+    if (heading.tagName === 'H2') {
+      chapterList.append(item);
+      subchapterList = document.createElement('ul');
+      item.append(subchapterList);
+    } else if (subchapterList) {
+      subchapterList.append(item);
+    } else {
+      chapterList.append(item);
+    }
+  }
+
+  navigation.replaceChildren(chapterList);
+
+  const links = [...navigation.querySelectorAll<HTMLAnchorElement>('a')];
+  const linkById = new Map(links.map((link) => [link.hash.slice(1), link]));
+  const updateCurrentChapter = () => {
+    const contentTop = content?.getBoundingClientRect().top ?? 0;
+    const readingLine = contentTop + (content?.clientHeight ?? window.innerHeight) * 0.25;
+    const currentHeading = headings.reduce<HTMLHeadingElement | undefined>(
+      (current, heading) =>
+        heading.getBoundingClientRect().top <= readingLine ? heading : current,
+      undefined
+    ) ?? headings[0];
+
+    for (const link of links) {
+      link.removeAttribute('aria-current');
+    }
+    linkById.get(currentHeading?.id ?? '')?.setAttribute('aria-current', 'location');
+  };
+
+  updateCurrentChapter();
+  content?.addEventListener('scroll', updateCurrentChapter, { passive: true });
+  content?.addEventListener('resize', updateCurrentChapter);
+  window.addEventListener('resize', updateCurrentChapter);
+}
 // ===
