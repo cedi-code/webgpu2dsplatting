@@ -8,9 +8,20 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot/dist/uPlot.min.css" />
     <link rel="stylesheet" href="mystle.css">
+    <link rel="stylesheet" href="copilot-style.css">
   </head>
   <body>
-    <h1>Optimization Step</h1>
+    <div class="journey-page">
+      <aside class="chapter-sidebar">
+        <h2>Chapters</h2>
+        <button class="chapter-toggle" type="button" aria-expanded="false">
+          <span aria-hidden="true">→</span>
+          <span>Chapters</span>
+        </button>
+        <nav id="chapter-navigation" aria-label="Page chapters"></nav>
+      </aside>
+      <main class="journey-content">
+        <h1>Optimization Step</h1>
     <canvas id="compute" style="height: 0; width: 0;"></canvas>
     
     <div class="markdown-body markdown-dark" id="markdown-simpleoptimization"></div>
@@ -82,6 +93,8 @@
 
 
 
+      </main>
+    </div>
     <script type="module" src="src/journey/mainJourney.ts"></script>
     <script type="module" src="src/journey/scripts/gd1d/gd1dmain.ts"></script>
     <script type="module" src="src/journey/scripts/gd2d/gd2dsimple.ts"></script>

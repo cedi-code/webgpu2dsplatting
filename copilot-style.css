@@ -13,6 +13,87 @@ body {
   color: white;
 }
 
+html,
+body {
+  height: 100%;
+}
+
+.journey-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.chapter-sidebar {
+  flex: 0 0 240px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 1rem 1rem;
+  background-color: #f1f1f1;
+  color: black;
+}
+
+.chapter-sidebar h2 {
+  margin: 0;
+  padding: 0.5rem 1rem 1rem;
+  color: black;
+}
+
+.chapter-sidebar ul {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style-type: none;
+}
+
+.chapter-sidebar li a {
+  display: block;
+  padding: 0.5rem 1rem;
+  color: black;
+  text-decoration: none;
+}
+
+.chapter-sidebar li a:hover,
+.chapter-sidebar li a:focus-visible,
+.chapter-sidebar li a[aria-current="location"] {
+  background-color: #555555;
+  color: white;
+}
+
+.chapter-sidebar ul ul li a {
+  padding-left: 2rem;
+}
+
+.chapter-toggle {
+  display: none;
+}
+
+.journey-content {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--journey-padding);
+}
+
+.journey-content > * {
+  width: 100%;
+  max-width: 900px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .chapter-sidebar {
+    display: none;
+  }
+
+  .journey-content {
+    padding-right: 0;
+    padding-left: 0;
+  }
+}
+
 .journey-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
