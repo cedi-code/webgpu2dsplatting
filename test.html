@@ -7,24 +7,49 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css" />
     <link rel="stylesheet" href="mystle.css">
+    <link rel="stylesheet" href="copilot-style.css">
 
   </head>
   <body>
-    <h1>Test.html</h1>
-    <p>here i execute wgsl tests!</p>
-    <a href="index.html">Go back to main</a>
+    <div class="journey-page">
+      <aside class="chapter-sidebar">
+        <h2>Chapters</h2>
+        <nav class="journey-navigation">
+          <ul>
+            <li><a href="journey-primitive.html">1. Render gaussian</a></li>
+            <li><a href="journey-optimization.html">2. Optimization</a></li>
+            <li><a href="journey-parallel.html">3. Parallelize Computation</a></li>
+            <li><a href="journey-densification.html">4. Refining Splats</a></li>
+            <li><a href="journey-depth.html">5. Big Splats problem</a></li>
+          </ul>
+        </nav>
 
+        <h2>Extras</h2>
+        <nav class="journey-navigation journey-navigation-current">
+          <ul>
+            <li><a href="index.html">Demo</a></li>
+            <li><a href="test.html"  aria-current="page" >Numerical Gradients Check</a></li>
+          </ul>
+        </nav>
+        <nav id="chapter-navigation"></nav>
+      </aside>
 
-    <div class="markdown-body markdown-dark" id="markdown-testing"></div>
+      <main class="journey-content">
+        <h1>Test.html</h1>
+        <p>here i execute wgsl tests!</p>
 
-    <div class="markdown-body">
-      <div class="sliders-row">
-        <div>
-          <div class="slider" id="output-window"></div>
-          Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
-        </div>
+        <div class="markdown-body markdown-dark" id="markdown-testing"></div>
+
+        <div class="markdown-body">
+          <div class="sliders-row">
+            <div>
+              <div class="slider" id="output-window"></div>
+              Input Powered by <a href="https://tweakpane.github.io/docs/" target="_blank">Tweakpane</a>
+            </div>
             <canvas id="test" width="0" height="0"></canvas>
-      </div>
+          </div>
+        </div>
+      </main>
     </div>
     
     <script type="module" src="src/journey/mainJourney.ts"></script>

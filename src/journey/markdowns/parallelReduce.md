@@ -1,5 +1,5 @@
 ## Parallelize Backwardspass
-<div align="center" style="font-size: 2rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+<div align="center" style="font-size: 2rem; font-family:  'Segoe Script', cursive">
   We need to parallelize!
 </div>
 <div align="center">

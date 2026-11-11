@@ -15,10 +15,10 @@ While testing my splater method for multiple images i kept noticing that very la
 
 ### Remove them?
 my first intuition was
-<div align="center" style="font-size: 2rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+<div align="center" style="font-size: 2rem; font-family:  'Segoe Script', cursive">
   "Big blobs are bad! Let me try to remove them!"
 </div>
-<div align="right" style="font-size: rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+<div align="right" style="font-size: rem; font-family:  'Segoe Script', cursive">
   ~ my dumb ass
 </div>
 
@@ -44,10 +44,10 @@ So removing the low frequencies (big splats) is just not going to work to have a
 So what i actually need is:
 
 
-<div align="center" style="font-size: 2rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+<div align="center" style="font-size: 2rem; font-family:  'Segoe Script', cursive">
   "Big blobs are good! Let me try put them in the back!"
 </div>
-<div align="right" style="font-size: rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+<div align="right" style="font-size: rem; font-family:  'Segoe Script', cursive">
   ~ my less dumb ass
 </div>
 

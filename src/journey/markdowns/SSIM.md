@@ -20,8 +20,8 @@ $$
 
 wich maps the range of SSIM from [-1, 1] to D-SSIM [0,1], what the output means exactly is discussed bellow.
 
-### Structural Similarity Index Measure (SSIM)
-If one wants to know more about SSIM, one can read this [hitchhikers Guide](https://arxiv.org/pdf/2101.06354). But I will shortly explain it here. 
+### Definition
+If one wants to know more about SSIM (Structural Similarity Index Measure), one can read this [hitchhikers Guide](https://arxiv.org/pdf/2101.06354). But I will shortly explain it here. 
 
 SSIM takes two inputs and outputs a scalar value. $I_1, I_2 \in \R^{3 \times N \times N}$ are two square rgb images we are comparing
 

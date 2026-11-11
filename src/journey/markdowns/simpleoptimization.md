@@ -1,9 +1,9 @@
-## Optimization Step
+## Overview
 We can now draw splats, now lets try to make them fit to our images
 
 This again I will break down in substeps, to slowley arrive at our goal.
 
-### Optimization Step
+### Goals
 * [ ] gradient descent + comute shaders
 * [ ] Gradient 2d (+ Texture loading)
 * [ ] Adam
@@ -14,13 +14,13 @@ Lets start with a simple example
 
 ###### *All graph visualization are powerd by [uplot](https://leeoniya.github.io/uPlot/), Input elements are powerd by [tweakpane](https://tweakpane.github.io/docs/v3/)*
 
-## gradient descent (and compute shaders)
+## gradient descent 
 
 First, what do we want to optimize? When talking about optimization we mean optimization of a function $f(x)$ for which we have some data: inputs $x$ and wanted outputs $y^*$. We assume our function to have a certain "shape" here already but we dont know the exact values of that shape, these "values" are our parameters we want to optimize for $\theta$.
 
 find the optimal $\theta$ such that $f(x ; \theta) = y \approx y^*$
 
-### Example
+### 1D Example
 Lets start with a simple example, the function we are trying to optimize has the following shape:
 
 $$
@@ -72,6 +72,7 @@ in wgsl gradient descent could look like this:
 }
 ```
 
+### compute shaders
 For setting up compute shaders one can follow the wonderful tutorial webgpufundamentals: [Run computations on the GPU](https://webgpufundamentals.org/webgpu/lessons/webgpu-fundamentals.html#a-run-computations-on-the-gpu).
 
 

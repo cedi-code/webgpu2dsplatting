@@ -59,7 +59,7 @@ $$
 
 $$
 
-### combine to get adam
+### Combination
 
 Now lets use both these methods and combine them.
 we have now the following:

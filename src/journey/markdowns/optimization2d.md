@@ -1,4 +1,4 @@
-## Gradient 2d (+ Texture loading)
+## Gradient 2d
 Now that we can optimize $f(x)$ for $\mu$ in a 1D gaussian, lets do it in 2d!
 Lets extend our definiton of $f(x)$ to $g(x): \R² \rightarrow \R $:
 
@@ -184,7 +184,7 @@ fn gGrad(x :vec2f, p : Params) -> GaussParams {
 
 Cool. This Code could optimize our parameters...but we need something to optimize for, our $y^*$. The part I left out, what is even `dataY[i][j]`?
 
-### Using Texture as Y
+### Optimize Image
 for this example use this texture for our $y^* = I^*$:
 
 <img src="assets/testImage.jpg" width="200" height="200">

@@ -1,9 +1,9 @@
-## Render a 2d gaussian
+##  Overview
 Lets start at the first step, just rendering a elipsoid
 
 II will break down this step in the following substeps:
 
-### Render a 2d gaussian
+### Goals
 * [ ] WebGPU setup (rendering simple trinalge)
 * [ ] Drawing a Gaussian
 * [ ] Transforming Gaussians

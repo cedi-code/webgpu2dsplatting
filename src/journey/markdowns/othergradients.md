@@ -189,7 +189,7 @@ $$
 
 we can calulate this value for some input $x_i \in \R^2$ and compare it with our implementation. Well its actually a bit more difficult than that, so if you are intressted in testing our gradients, one can read the article: [Gradient Checking](https://cedi-code.github.io/webgpu2dsplatting/test.html) ! where I check the gradients we just implemented and compare them to the numerical approximation.
 
-### Color and Alpha Gradients
+### Color and Alpha
 
 Previously our color used to just be the luminance (scalar value), which in our case is just $g(x)$. but for color this is a 3d vector. A Red, green and blue channel. Each gaussian has itself assigned a unique color and a alpha value since we are not doing spherical harmonics this makes it quite ez. I will define our output image as:
 

@@ -1,4 +1,4 @@
-## Refine
+## Overview
 
 Up to this chapter we can now:
 
@@ -7,11 +7,12 @@ Up to this chapter we can now:
 * [x] [Doing it parallel over gaussians and image pixels](journey-parallel.html)
 
 Yet we can improve the quality of our approximations even more by doing the thing they call:
-<div align="center" style="font-size: 2rem; font-family: 'Brush Script MT', 'Segoe Script', cursive">
+<div align="center" style="font-size: 2rem; font-family:  'Segoe Script', cursive">
   Refinment!
 </div>
 
 
+### Goal
 Lets say we would like to approximate this simple image bellow, Refinment gives us two cases to improve our quality.
 <div align="center">
     <img src="assets/fourBlobs.jpg" width="200">
@@ -38,7 +39,7 @@ for(let i = 0; i < nSteps; i++)
         refineSplatsPass() 
 ```
 
-### Pruning (Removing Splats)
+## Pruning
 
 Splats that go off screen should be removed, since they do not contriubte to the image at all and we need to loop over less of them.
 
@@ -177,7 +178,7 @@ Small note, we also mark splats to be removed with low alpha values, which we ca
     ...
 ```
 
-### Densification
+## Densification
 
 the quality of the image highly depens on how many splats we had in the beginning! for example lets consider this image:
 
