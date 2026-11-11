@@ -113,10 +113,12 @@ if (navigation && markdownBlocks.length > 0) {
 
   const chapterList = document.createElement('ul');
   let subchapterList: HTMLUListElement | undefined;
+  const chapterItemByHeadingId = new Map<string, HTMLLIElement>();
 
   for (const heading of headings) {
     const link = document.createElement('a');
-    link.href = `#${createHeadingId(heading)}`;
+    const headingId = createHeadingId(heading);
+    link.href = `#${headingId}`;
     link.textContent = heading.textContent ?? 'Chapter';
 
     const item = document.createElement('li');
@@ -126,6 +128,7 @@ if (navigation && markdownBlocks.length > 0) {
       chapterList.append(item);
       subchapterList = document.createElement('ul');
       item.append(subchapterList);
+      chapterItemByHeadingId.set(headingId, item);
     } else if (subchapterList) {
       subchapterList.append(item);
     } else {
@@ -137,19 +140,26 @@ if (navigation && markdownBlocks.length > 0) {
 
   const links = [...navigation.querySelectorAll<HTMLAnchorElement>('a')];
   const linkById = new Map(links.map((link) => [link.hash.slice(1), link]));
+  const chapterHeadings = headings.filter((heading) => heading.tagName === 'H2');
   const updateCurrentChapter = () => {
     const contentTop = content?.getBoundingClientRect().top ?? 0;
     const readingLine = contentTop + (content?.clientHeight ?? window.innerHeight) * 0.25;
-    const currentHeading = headings.reduce<HTMLHeadingElement | undefined>(
+    const currentChapterHeading = chapterHeadings.reduce<HTMLHeadingElement | undefined>(
       (current, heading) =>
         heading.getBoundingClientRect().top <= readingLine ? heading : current,
       undefined
-    ) ?? headings[0];
+    ) ?? chapterHeadings[0];
+    const currentChapter = currentChapterHeading
+      ? chapterItemByHeadingId.get(currentChapterHeading.id)
+      : undefined;
 
     for (const link of links) {
       link.removeAttribute('aria-current');
     }
-    linkById.get(currentHeading?.id ?? '')?.setAttribute('aria-current', 'location');
+    linkById.get(currentChapterHeading?.id ?? '')?.setAttribute('aria-current', 'location');
+    for (const item of chapterItemByHeadingId.values()) {
+      item.classList.toggle('chapter-current', item === currentChapter);
+    }
   };
 
   updateCurrentChapter();
