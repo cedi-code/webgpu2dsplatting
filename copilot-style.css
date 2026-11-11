@@ -16,6 +16,7 @@ body {
 html,
 body {
   height: 100%;
+  overflow: hidden;
 }
 
 .journey-page {
@@ -40,9 +41,10 @@ body {
 }
 
 .journey-navigation {
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid #999999;
+  margin-bottom: 1rem;
+  padding: 0.25rem 0;
+  border-left: 4px solid #2563eb;
+  background-color: #dbeafe;
 }
 
 .journey-navigation ul {
@@ -55,7 +57,7 @@ body {
 .journey-navigation li a {
   display: block;
   padding: 0.65rem 1rem;
-  color: #333333;
+  color: #1e3a8a;
   font-size: 0.95em;
   font-weight: 700;
   text-decoration: none;
@@ -64,8 +66,18 @@ body {
 .journey-navigation li a:hover,
 .journey-navigation li a:focus-visible,
 .journey-navigation li a[aria-current="page"] {
-  background-color: #dddddd;
+  background-color: #bfdbfe;
   color: darkblue;
+}
+
+.journey-navigation-current {
+  border-left-color: #1d4ed8;
+  background-color: #bfdbfe;
+}
+
+.journey-navigation-current li a {
+  color: #172554;
+  font-size: 1em;
 }
 
 .chapter-sidebar ul {
