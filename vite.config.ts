@@ -6,7 +6,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
+        demo: resolve(__dirname, 'index.html'),
+        motivation: resolve(__dirname, 'journey-intro.html'),
         playground: resolve(__dirname, 'playground.html'),
         primitive: resolve(__dirname, 'journey-primitive.html'),
         optimization: resolve(__dirname, 'journey-optimization.html'),
