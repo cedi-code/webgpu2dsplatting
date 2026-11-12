@@ -1,16 +1,23 @@
-
-
 # How was this made?
+
 in the following articles I will document and explain my journey step by step for how I made a gaussian splatting pipeline from scratch in webgpu.
 
 The goal here is not to get a perfect splatter, but for me (and you) to more deeply understanding on how WebGPU and Gaussian Splatting works.
 
-For this blog we just follow the description of the original [3DGS paper](https://arxiv.org/pdf/2308.04079) without looking at how they implemented it. Some basic knowledge of shaders, typescript and calculus 2 is recommended but not really needed. 
+For this blog we just follow the description of the original [3DGS paper](https://arxiv.org/pdf/2308.04079) without looking at how they implemented it.
+
+#### prerequisite
+Some basic knowledge of these topics is recommended to read the blog
+
+- a bit of WebGPU (catch up [here](https://webgpufundamentals.org/webgpu/lessons/webgpu-fundamentals.html)) 
+- calculus 2
+
+
 
 ### Live Demo
 live demo can be found [here](index.html) (WebGPU must be enabled in your browser).
 
-### Steps making img2splat possible in webgpu
+### Pipeline Steps from img2splat that mirror 3DGS
 
  - [ ] [Render a 2d gaussian](journey-primitive.html) — *chapter 4*
 
@@ -18,12 +25,12 @@ live demo can be found [here](index.html) (WebGPU must be enabled in your browse
  - [ ] [Parallelize the Optimization](journey-parallel.html) - *chapter 6*
  - [ ] [The densification and refinement step](journey-densification) — *chapter 5.2*
 
-**poc done**
-- [ ] Experiment with depth
-- [ ] Performance Profiling (finding more bottlenecks)
-**finish up**
-
 ### AI Usage
+Little to no usage of Coding-Agents for the pipeline implemenation and blog. See more in details.
+<details>
+  <summary> Show details</summary>
+
+
 The art of sideprojects and making things from scratch in the current AI-landscape is a bit overrated imo.
 Around 80-90% of the code, all of the math derivations, and all of the text in the blog are written by me (cedi).
 
@@ -36,5 +43,6 @@ I used AI tools for :
 
 Copilots code is marked in the git commit history.
 
+</details>
 
 ###### *markdown rendering is powerd by [marked](https://www.npmjs.com/package/marked), [shiki](https://www.npmjs.com/package/shiki) and [Katex](https://www.npmjs.com/package/katex)*

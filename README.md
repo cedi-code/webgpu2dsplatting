@@ -1,29 +1,21 @@
-<div align="center">
-  <img src="assets/titleTextCropped.gif" alt="Image to Gaussian Splat" />
-</div>
+
 
 # WebGPU Image to Gaussian Splat
 
-From scratch interactive Image to Gaussian Splat for WebGPU, following the same techniques of the
-original [3D Gaussian Splatting paper](https://arxiv.org/pdf/2308.04079)
+<div align="center">
+  <img width="200" src="assets/alpenrosen.gif" alt="Image to Gaussian Splat" />
+  <img height="200" src="assets/alperoseCropped.jpg" />
+</div>
 
+From scratch implementation of gaussian splatting pipeline that fits 2D gaussians on images following the same techniques of the
+original [3D Gaussian Splating paper](https://arxiv.org/pdf/2308.04079)
 
-## How was this made?
+It is not a perfect splatter, but a blog for me (and you) to more deeply understanding how WebGPU and Gaussian Splatting works and have a fun interactive webinterface to play around with.
 
-The following articles document the step-by-step journey of making img2splat in WebGPU.
+## Blog
 
-### Steps making img2splat possible in webgpu
+The following [articles](https://cedi-code.github.io/webgpu-img2splat/journey-intro.html) document the step-by-step journey of making img2splat in WebGPU with interactive examples.
 
- - [ ] [Render a 2d gaussian](https://cedi-code.github.io/webgpu-img2splat/journey-primitive.html) — *chapter 4*
-
- - [ ] [Optimization Step](https://cedi-code.github.io/webgpu-img2splat/journey-optimization.html) — *chapter 5.1*
- - [ ] [Parallelize the Optimization](https://cedi-code.github.io/webgpu-img2splat/journey-parallel.html) - *chapter 6*
- - [ ] [The densification and refinment step](https://cedi-code.github.io/webgpu-img2splat/journey-densification.html) — *chapter 5.2*
-
-**poc done**
-- [ ] Experiment with depth
-- [ ] Performance Profiling (finding more bottelnecks)
-**finish up**
 
 ## Technical stuff
 
