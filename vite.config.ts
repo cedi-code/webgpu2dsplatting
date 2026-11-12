@@ -2,7 +2,7 @@ import { resolve } from 'path'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/webgpu2dsplatting/',
+  base: '/webgpuimg2splat/',
   build: {
     rollupOptions: {
       input: {

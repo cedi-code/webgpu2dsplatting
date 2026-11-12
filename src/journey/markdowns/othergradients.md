@@ -187,7 +187,7 @@ $$
 \frac{\partial}{\partial s}g(x;r) \approx \frac{g(x; r + h) - g(x;r)}{h}
 $$
 
-we can calulate this value for some input $x_i \in \R^2$ and compare it with our implementation. Well its actually a bit more difficult than that, so if you are intressted in testing our gradients, one can read the article: [Gradient Checking](https://cedi-code.github.io/webgpu2dsplatting/test.html) ! where I check the gradients we just implemented and compare them to the numerical approximation.
+we can calulate this value for some input $x_i \in \R^2$ and compare it with our implementation. Well its actually a bit more difficult than that, so if you are intressted in testing our gradients, one can read the article: [Gradient Checking](https://cedi-code.github.io/webgpuimg2splat/test.html) ! where I check the gradients we just implemented and compare them to the numerical approximation.
 
 ### Color and Alpha
 

@@ -1,6 +1,6 @@
 ## Drawing a Gaussian
 ### Definition
-Our primitive in 2dgs is a elliptical Gaussian. It has two properties
+Our primitive in img2splat is a elliptical Gaussian. It has two properties
 * $\mu$ the mean, which represents the position / center
 * $\Sigma$ the variance, which represents the shape
 

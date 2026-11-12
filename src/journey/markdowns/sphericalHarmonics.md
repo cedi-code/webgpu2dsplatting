@@ -29,8 +29,8 @@ $$
  \text{3dgs, the color of the splat is view dependant } (\theta, \phi)
 $$
 
-### 2dgs case
-so how can we apply this for 2dgs? there is a problem, and a easy solution:
+### img2splat case
+so how can we apply this for img2splat? there is a problem, and a easy solution:
 
 $$
  \text{ we dont have a viewing angle } \implies \text{color function is constant}

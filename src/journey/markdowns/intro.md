@@ -1,8 +1,12 @@
 # How was this made?
-in the following articles I will document and explain my journey step by step for how I made the 2dgs in webgpu.
-The art of sideprojects in the current AI-landscape is a bit overrated imo, so I will explicitly not use any AI-tools (except for some frontend styling and refactoring). 
+in the following articles I will document and explain my journey step by step for how I made the img2splat in webgpu.
+The art of sideprojects in the current AI-landscape is a bit overrated imo, so I will explicitly not use any AI-tools (except for some frontend styling and large recfactors).
 
-### Steps making 2dgs possible in webgpu
+The goal here is not to get a perfect splatter, but for me to more deeply understanding on how WebGPU and Gaussian Splatting works.
+
+I just followed the description of the original [3DGS paper](https://arxiv.org/pdf/2308.04079) without looking at how they implemented it.
+
+### Steps making img2splat possible in webgpu
 
  - [ ] [Render a 2d gaussian](journey-primitive.html) — *chapter 4*
 
