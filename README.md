@@ -14,11 +14,11 @@ The following articles document the step-by-step journey of making img2splat in 
 
 ### Steps making img2splat possible in webgpu
 
- - [ ] [Render a 2d gaussian](https://cedi-code.github.io/webgpuimg2splat/journey-primitive.html) — *chapter 4*
+ - [ ] [Render a 2d gaussian](https://cedi-code.github.io/webgpu-img2splat/journey-primitive.html) — *chapter 4*
 
- - [ ] [Optimization Step](https://cedi-code.github.io/webgpuimg2splat/journey-optimization.html) — *chapter 5.1*
- - [ ] [Parallelize the Optimization](https://cedi-code.github.io/webgpuimg2splat/journey-parallel.html) - *chapter 6*
- - [ ] [The densification and refinment step](https://cedi-code.github.io/webgpuimg2splat/journey-densification.html) — *chapter 5.2*
+ - [ ] [Optimization Step](https://cedi-code.github.io/webgpu-img2splat/journey-optimization.html) — *chapter 5.1*
+ - [ ] [Parallelize the Optimization](https://cedi-code.github.io/webgpu-img2splat/journey-parallel.html) - *chapter 6*
+ - [ ] [The densification and refinment step](https://cedi-code.github.io/webgpu-img2splat/journey-densification.html) — *chapter 5.2*
 
 **poc done**
 - [ ] Experiment with depth

@@ -87,7 +87,7 @@ one issue with our current implementation is with the $\mu_I(i,j)$ and $\sigma_I
 but
 - computing the gradient of SSIM requires information of the final image pixels around it.
 
-Basically we need a forward pass (that computes the final image $I$). We could do this inside the compute shader but I decided we can reuse the instancing logic from [before](https://cedi-code.github.io/webgpuimg2splat/journey-primitive.html).
+Basically we need a forward pass (that computes the final image $I$). We could do this inside the compute shader but I decided we can reuse the instancing logic from [before](https://cedi-code.github.io/webgpu-img2splat/journey-primitive.html).
 
 ### Forward pass
 Todo this we need the following:
