@@ -48,6 +48,31 @@ function render(
     ctx.device.queue.submit([commandBuffer]);
 }
 
+function webgpuWarningSlow() {
+    let modal = document.getElementById("webgpu-modal") as HTMLDialogElement | null;
+
+    if (!modal) {
+        modal = document.createElement("dialog");
+        modal.id = "webgpu-modal";
+        
+        modal.innerHTML = `
+            <h3 style="margin-top: 0; margin-bottom: 1rem;">WebGPU Supported but very slow!</h3>
+            <p style="margin-bottom: 1rem;">Your browser supports WebGPU but its rendering on the CPU! </p>
+            <p style="margin-bottom: 1.5rem;">The demos might be very slow!</p>
+
+            <button id="webgpu-close-btn" >Close</button>
+            `;
+        
+        document.body.appendChild(modal);
+        const closeBtn = modal.querySelector("#webgpu-close-btn");
+            closeBtn?.addEventListener("click", () => {
+                modal?.close();
+            });
+    }
+
+    modal.showModal();
+}
+
 function webgpuWarning() {
     let modal = document.getElementById("webgpu-modal") as HTMLDialogElement | null;
 
@@ -83,6 +108,13 @@ async function getWebGPUctx(options? : ctxOptions) : Promise< ctxWebGPU| null> {
     if(!adapter) {
         webgpuWarning();
         return null;
+    }
+    const info = adapter.info;
+    const text = `${info.vendor} ${info.architecture} ${info.device} ${info.description}`.toLowerCase();
+    const isSoftware = /swiftshader|llvmpipe|lavapipe|softpipe|warp|software|cpu/.test(text);
+    if (isSoftware) {
+        console.warn('Running on a software renderer, performance will be poor.');
+        webgpuWarningSlow();
     }
     const device = await adapter?.requestDevice();
     if(!device) {
